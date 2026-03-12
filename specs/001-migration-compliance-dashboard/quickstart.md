@@ -17,6 +17,11 @@ ADO_ORGANIZATION=<your-org-name>
 ADO_PROJECT=<optional-project-filter>
 ```
 
+**PAT Scope Requirements**:
+- **Code (Read)** — repository scanning
+- **Work Items (Read & Write)** — work item creation, boards, WIQL queries
+- **Wiki (Read)** — wiki page browsing
+
 ## Quick Start (Docker Compose)
 
 ```bash
@@ -123,6 +128,68 @@ Expected: 422, validation error
 3. GET /api/dashboard → 200 (same scan_timestamp, served from cache)
 ```
 
+### Scenario 13: List Wikis
+```
+GET /api/wiki?project=Platform
+Expected: 200, body is array of WikiInfo objects with id, name, type
+```
+
+### Scenario 14: Get Wiki Page
+```
+GET /api/wiki/{wiki_id}/page?path=/Home&project=Platform
+Expected: 200, body has path, content (Markdown string), sub_pages array
+```
+
+### Scenario 15: List Wiki Pages (Tree)
+```
+GET /api/wiki/{wiki_id}/pages?project=Platform
+Expected: 200, body has wiki_id, wiki_name, pages array (may contain nested sub_pages)
+```
+
+### Scenario 16: Wiki with Invalid Wiki ID
+```
+GET /api/wiki/nonexistent/page?path=/Home
+Expected: 200, body has empty content or null (graceful handling)
+```
+
+### Scenario 17: List Boards
+```
+GET /api/boards?project=Platform
+Expected: 200, body is array of BoardInfo objects with id, name, url
+```
+
+### Scenario 18: Board Detail with Columns
+```
+GET /api/boards/Stories?project=Platform
+Expected: 200, body has board_name, columns array (with state_mappings), work_items array
+```
+
+### Scenario 19: Custom WIQL Query
+```
+POST /api/boards/query
+Body: { "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'User Story'", "project": "Platform", "top": 50 }
+Expected: 200, body has count int, work_items array of WorkItemInfo
+```
+
+### Scenario 20: List Work Items with Filters
+```
+GET /api/boards/workitems/list?project=Platform&work_item_type=Bug&state=Active&top=100
+Expected: 200, body has count, work_items filtered by type and state
+```
+
+### Scenario 21: Board Detail with Team
+```
+GET /api/boards/Stories?project=Platform&team=Alpha
+Expected: 200, team-scoped board detail
+```
+
+### Scenario 22: WIQL with Invalid Query
+```
+POST /api/boards/query
+Body: { "wiql": "", "project": "Platform" }
+Expected: 200 with empty work_items (graceful), or 500 with ADO error details
+```
+
 ## Smoke Test Script
 
 ```bash
@@ -132,4 +199,13 @@ curl -s -X POST http://localhost:8000/api/scan -H "Content-Type: application/jso
 sleep 30
 curl -s http://localhost:8000/api/dashboard?organization=my-org | jq .total_repos
 curl -s http://localhost:8000/api/export?organization=my-org&format=csv -o report.csv
+
+# Wiki endpoints
+curl -s http://localhost:8000/api/wiki | jq .
+curl -s "http://localhost:8000/api/wiki/WIKI_ID/pages" | jq .pages
+
+# Boards endpoints
+curl -s http://localhost:8000/api/boards | jq .
+curl -s http://localhost:8000/api/boards/Stories | jq .columns
+curl -s "http://localhost:8000/api/boards/workitems/list?work_item_type=User+Story&top=10" | jq .count
 ```

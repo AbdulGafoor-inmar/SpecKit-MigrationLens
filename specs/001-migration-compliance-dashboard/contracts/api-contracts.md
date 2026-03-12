@@ -225,3 +225,264 @@ Exports compliance report in specified format.
 - `Content-Disposition: attachment; filename="migration-report-{date}.{ext}"`
 
 **Response 404**: No scan data to export.
+
+---
+
+## GET /api/wiki
+
+Lists all wikis (project and code wikis) in the configured Azure DevOps project.
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| project | string | no | "" | ADO project name (uses env default if empty) |
+
+**Response 200** (`list[WikiInfo]`):
+```json
+[
+  {
+    "id": "wiki-guid-123",
+    "name": "Platform.wiki",
+    "type": "projectWiki",
+    "url": "https://dev.azure.com/org/project/_apis/wiki/wikis/wiki-guid-123",
+    "project_id": "proj-guid",
+    "repository_id": "repo-guid"
+  }
+]
+```
+
+---
+
+## GET /api/wiki/{wiki_id}/page
+
+Returns a single wiki page with its Markdown content.
+
+**Path Parameters**:
+| Param | Type | Description |
+|-------|------|-------------|
+| wiki_id | string | Wiki identifier |
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| path | string | no | "/" | Wiki page path (e.g., "/Architecture/Overview") |
+| project | string | no | "" | ADO project name |
+
+**Response 200** (`WikiPage`):
+```json
+{
+  "id": 42,
+  "path": "/Architecture/Overview",
+  "content": "# Architecture Overview\n\nThis document describes...",
+  "git_item_path": "/Architecture/Overview.md",
+  "sub_pages": [],
+  "remote_url": "https://dev.azure.com/org/project/_wiki/wikis/wiki-guid/42/Overview",
+  "order": 0
+}
+```
+
+---
+
+## GET /api/wiki/{wiki_id}/pages
+
+Lists all wiki pages in a tree structure for a given wiki.
+
+**Path Parameters**:
+| Param | Type | Description |
+|-------|------|-------------|
+| wiki_id | string | Wiki identifier |
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| path | string | no | "/" | Root path to list from |
+| project | string | no | "" | ADO project name |
+
+**Response 200** (`WikiPageListResponse`):
+```json
+{
+  "wiki_id": "wiki-guid-123",
+  "wiki_name": "Platform.wiki",
+  "pages": [
+    {
+      "id": 1,
+      "path": "/Home",
+      "content": "",
+      "git_item_path": "/Home.md",
+      "sub_pages": [
+        {
+          "id": 2,
+          "path": "/Home/Getting-Started",
+          "content": "",
+          "git_item_path": "/Home/Getting-Started.md",
+          "sub_pages": [],
+          "remote_url": "",
+          "order": 0
+        }
+      ],
+      "remote_url": "",
+      "order": 0
+    }
+  ]
+}
+```
+
+---
+
+## GET /api/boards
+
+Lists all boards in a project/team.
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| project | string | no | "" | ADO project name |
+| team | string | no | "" | Team name (uses default team if empty) |
+
+**Response 200** (`list[BoardInfo]`):
+```json
+[
+  {
+    "id": "board-guid-123",
+    "name": "Stories",
+    "url": "https://dev.azure.com/org/project/_apis/work/boards/Stories"
+  },
+  {
+    "id": "board-guid-456",
+    "name": "Bugs",
+    "url": "https://dev.azure.com/org/project/_apis/work/boards/Bugs"
+  }
+]
+```
+
+---
+
+## GET /api/boards/{board_name}
+
+Returns board column configuration and associated work items.
+
+**Path Parameters**:
+| Param | Type | Description |
+|-------|------|-------------|
+| board_name | string | Board name (e.g., "Stories", "Bugs") |
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| project | string | no | "" | ADO project name |
+| team | string | no | "" | Team name |
+
+**Response 200** (`BoardDetailResponse`):
+```json
+{
+  "board_name": "Stories",
+  "columns": [
+    {
+      "id": "col-guid-1",
+      "name": "New",
+      "item_limit": 0,
+      "state_mappings": { "User Story": "New" }
+    },
+    {
+      "id": "col-guid-2",
+      "name": "Active",
+      "item_limit": 5,
+      "state_mappings": { "User Story": "Active" }
+    }
+  ],
+  "work_items": [
+    {
+      "id": 12345,
+      "title": "Migrate MyService to .NET 10",
+      "state": "Active",
+      "work_item_type": "User Story",
+      "assigned_to": "Jane Smith",
+      "priority": 2,
+      "tags": "migration;net10",
+      "created_date": "2026-03-01T10:00:00Z",
+      "changed_date": "2026-03-12T14:30:00Z",
+      "url": "https://dev.azure.com/org/project/_workitems/edit/12345"
+    }
+  ]
+}
+```
+
+---
+
+## POST /api/boards/query
+
+Executes a custom WIQL (Work Item Query Language) query.
+
+**Request Body** (`WorkItemQueryRequest`):
+```json
+{
+  "wiql": "SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.WorkItemType] = 'User Story' AND [System.State] = 'Active'",
+  "project": "Platform",
+  "top": 100
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| wiql | string | yes | WIQL query string |
+| project | string | no | ADO project scope |
+| top | int | no | Max results 1-500 (default: 200) |
+
+**Response 200** (`WorkItemQueryResponse`):
+```json
+{
+  "count": 3,
+  "work_items": [
+    {
+      "id": 12345,
+      "title": "Migrate MyService to .NET 10",
+      "state": "Active",
+      "work_item_type": "User Story",
+      "assigned_to": "Jane Smith",
+      "priority": 2,
+      "tags": "migration",
+      "created_date": "2026-03-01T10:00:00Z",
+      "changed_date": "2026-03-12T14:30:00Z",
+      "url": "https://dev.azure.com/org/project/_workitems/edit/12345"
+    }
+  ]
+}
+```
+
+**Response 422**: Invalid WIQL syntax.
+
+---
+
+## GET /api/boards/workitems/list
+
+Lists work items with optional filters, auto-building a WIQL query from parameters.
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| project | string | no | "" | ADO project name |
+| work_item_type | string | no | "User Story" | Filter by type (User Story, Bug, Task, Epic, Feature) |
+| state | string | no | "" | Filter by state (New, Active, Resolved, Closed) |
+| tags | string | no | "" | Filter by tag (contains match) |
+| top | int | no | 200 | Max results 1-500 |
+
+**Response 200** (`WorkItemQueryResponse`):
+```json
+{
+  "count": 15,
+  "work_items": [
+    {
+      "id": 12345,
+      "title": "Migrate MyService to .NET 10",
+      "state": "Active",
+      "work_item_type": "User Story",
+      "assigned_to": "Jane Smith",
+      "priority": 2,
+      "tags": "migration;net10",
+      "created_date": "2026-03-01T10:00:00Z",
+      "changed_date": "2026-03-12T14:30:00Z",
+      "url": "https://dev.azure.com/org/project/_workitems/edit/12345"
+    }
+  ]
+}
+```

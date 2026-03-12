@@ -17,7 +17,7 @@ Build an AI-powered .NET 10 / C# 14 Modernization Compliance Dashboard that scan
 **Project Type**: web-service (full-stack dashboard)
 **Performance Goals**: Dashboard load < 2s, scan 100 repos < 5 min, SSE progress updates < 500ms latency
 **Constraints**: No database, file-based persistence only, ADO PAT required for API access
-**Scale/Scope**: ~100-500 repos per organization, 30+ compliance rules, 7 categories, 6 pages/views
+**Scale/Scope**: ~100-500 repos per organization, 30+ compliance rules, 7 categories, 8 pages/views (including wiki browser and boards)
 
 ## Constitution Check
 
@@ -75,7 +75,9 @@ backend/
 │   │   ├── repos.py         # GET /api/repos/{repo_id}
 │   │   ├── workitems.py     # POST /api/workitems
 │   │   ├── export.py        # GET /api/export
-│   │   └── health.py        # GET /api/health
+│   │   ├── health.py        # GET /api/health
+│   │   ├── wiki.py          # GET /api/wiki, GET /api/wiki/{id}/page, GET /api/wiki/{id}/pages
+│   │   └── boards.py        # GET /api/boards, GET /api/boards/{name}, POST /api/boards/query, GET /api/boards/workitems/list
 │   └── rules/
 │       └── compliance-rules.yaml  # 30+ compliance rule definitions
 ├── tests/
@@ -83,7 +85,8 @@ backend/
 │   ├── test_compliance.py
 │   ├── test_scanner.py
 │   ├── test_api.py
-│   └── test_cache.py
+│   ├── test_cache.py
+│   └── test_wiki_boards.py   # Wiki & boards endpoint tests (11 tests)
 ├── requirements.txt
 ├── Dockerfile
 └── .env.example
@@ -94,9 +97,13 @@ frontend/
 │   │   ├── layout.tsx       # Root layout with dark theme
 │   │   ├── page.tsx         # Dashboard page (US1)
 │   │   ├── globals.css      # Tailwind + glassmorphism utilities
-│   │   └── repos/
-│   │       └── [id]/
-│   │           └── page.tsx # Repo detail page (US3)
+│   │   ├── repos/
+│   │   │   └── [id]/
+│   │   │       └── page.tsx # Repo detail page (US3)
+│   │   ├── wiki/
+│   │   │   └── page.tsx     # Wiki browser page (US7) — wiki selector, page tree, content viewer
+│   │   └── boards/
+│   │       └── page.tsx     # Boards & work items page (US8) — kanban board view, list view
 │   ├── components/
 │   │   ├── ui/
 │   │   │   ├── GlassCard.tsx
@@ -120,12 +127,14 @@ frontend/
 │   │       ├── Header.tsx
 │   │       └── Sidebar.tsx
 │   ├── lib/
-│   │   ├── api.ts           # Backend API client (fetch wrapper)
-│   │   └── types.ts         # TypeScript interfaces matching data-model
+│   │   ├── api.ts           # Backend API client (fetch wrapper) — includes wiki & boards functions
+│   │   └── types.ts         # TypeScript interfaces matching data-model (includes Wiki, Board, WorkItem types)
 │   └── hooks/
 │       ├── useDashboard.ts
 │       ├── useScanProgress.ts
-│       └── useRepoDetail.ts
+│       ├── useRepoDetail.ts
+│       ├── useWiki.ts       # useWikiList, useWikiPage, useWikiPages hooks
+│       └── useBoards.ts     # useBoardList, useBoardDetail, useWorkItems hooks
 ├── tailwind.config.ts
 ├── next.config.js
 ├── package.json

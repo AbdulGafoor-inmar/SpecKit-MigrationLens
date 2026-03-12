@@ -185,19 +185,85 @@
 
 ---
 
+## Phase 10: User Story 7 — Wiki Browser (Priority: P7)
+
+**Goal**: Engineers browse Azure DevOps wiki pages within the dashboard
+
+**Independent Test**: Navigate to `/wiki` → see wiki list → select wiki → browse page tree → view page content
+
+### Backend — US7
+
+- [x] T059 [US7] Add wiki methods to ADO client in `backend/app/services/ado_client.py` (list_wikis, get_wiki_page, list_wiki_pages using ADO Wiki REST API v7.1)
+- [x] T060 [US7] Create Wiki Pydantic schemas in `backend/app/models/schemas.py` (WikiInfo, WikiPage with self-referential sub_pages, WikiPageListResponse)
+- [x] T061 [US7] Create wiki API router in `backend/app/api/wiki.py` (GET /api/wiki — list wikis; GET /api/wiki/{wiki_id}/page — get page content; GET /api/wiki/{wiki_id}/pages — list page tree)
+- [x] T062 [US7] Register wiki router in `backend/app/main.py`
+
+### Frontend — US7
+
+- [x] T063 [P] [US7] Add WikiInfo, WikiPage, WikiPageListResponse TypeScript interfaces in `frontend/src/lib/types.ts`
+- [x] T064 [P] [US7] Add listWikis, getWikiPage, listWikiPages functions in `frontend/src/lib/api.ts`
+- [x] T065 [US7] Create wiki hooks in `frontend/src/hooks/useWiki.ts` (useWikiList, useWikiPage, useWikiPages — fetch on mount, loading/error states, refresh)
+- [x] T066 [US7] Create wiki browser page in `frontend/src/app/wiki/page.tsx` (wiki selector buttons, 2-column layout: recursive PageTree component + Markdown content viewer, glassmorphism styling)
+- [x] T067 [US7] Add Wiki navigation link (BookOpen icon) to `frontend/src/components/layout/Sidebar.tsx`
+
+### Tests — US7
+
+- [x] T068 [US7] Create wiki endpoint tests in `backend/tests/test_wiki_boards.py` (test_list_wikis, test_get_wiki_page, test_list_wiki_pages, test_list_wikis_ado_error — 4 tests with mocked ADO client)
+
+**Checkpoint**: Wiki browser page displays wikis, page tree, and page content from ADO
+
+---
+
+## Phase 11: User Story 8 — Boards & Work Items (Priority: P8)
+
+**Goal**: Managers view ADO boards, work items in kanban/list view, and execute WIQL queries
+
+**Independent Test**: Navigate to `/boards` → see board list → select board → view kanban columns with work items → toggle to list view → filter by type/state
+
+### Backend — US8
+
+- [x] T069 [US8] Add board methods to ADO client in `backend/app/services/ado_client.py` (list_boards, get_board_columns, list_work_items_on_board with board-to-type mapping)
+- [x] T070 [US8] Add WIQL query methods to ADO client in `backend/app/services/ado_client.py` (query_work_items with WIQL POST, _get_work_items_by_ids batch fetch, get_work_item single fetch)
+- [x] T071 [US8] Create Board & WorkItem Pydantic schemas in `backend/app/models/schemas.py` (WorkItemInfo, WorkItemQueryRequest, WorkItemQueryResponse, BoardInfo, BoardColumn, BoardDetailResponse)
+- [x] T072 [US8] Create boards API router in `backend/app/api/boards.py` (GET /api/boards — list boards; GET /api/boards/{board_name} — board detail with columns & work items; POST /api/boards/query — custom WIQL; GET /api/boards/workitems/list — filtered work items)
+- [x] T073 [US8] Register boards router in `backend/app/main.py`
+
+### Frontend — US8
+
+- [x] T074 [P] [US8] Add WorkItemInfo, WorkItemQueryResponse, BoardInfo, BoardColumn, BoardDetailResponse TypeScript interfaces in `frontend/src/lib/types.ts`
+- [x] T075 [P] [US8] Add listBoards, getBoardDetail, listWorkItems functions in `frontend/src/lib/api.ts`
+- [x] T076 [US8] Create boards hooks in `frontend/src/hooks/useBoards.ts` (useBoardList, useBoardDetail, useWorkItems — fetch on mount with params, loading/error states, refresh)
+- [x] T077 [US8] Create boards page in `frontend/src/app/boards/page.tsx` (board selector buttons, view toggle List/Board, kanban columns with WorkItemCard, list table with WorkItemRow, state color coding, priority labels, glassmorphism styling)
+- [x] T078 [US8] Add Boards navigation link (Columns icon) to `frontend/src/components/layout/Sidebar.tsx`
+
+### Tests — US8
+
+- [x] T079 [US8] Create boards endpoint tests in `backend/tests/test_wiki_boards.py` (test_list_boards, test_get_board_detail, test_query_work_items, test_list_work_items, test_list_boards_ado_error, test_query_with_invalid_project, test_get_board_detail_with_team — 7 tests with mocked ADO client)
+
+**Checkpoint**: Boards page displays kanban and list views with work items from ADO, WIQL queries work
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
 
 - **Phase 1 (Setup)**: No dependencies — start immediately
 - **Phase 2 (Foundational)**: Depends on Phase 1 — BLOCKS all user stories
-- **Phases 3-8 (User Stories)**: All depend on Phase 2 completion
+- **Phases 3-8 (User Stories 1-6)**: All depend on Phase 2 completion
   - US1 (P1) → US2 (P2) → US3 (P3) → US4 (P4) → US5 (P5) → US6 (P6) in priority order
   - US3 depends on US1 (navigation from dashboard to detail)
   - US4 depends on US3 (work item button on detail page)
   - US5 depends on US2 (needs scan data to export)
   - US6 depends on US1 (charts on dashboard page)
 - **Phase 9 (Polish)**: Depends on all user story phases complete
+- **Phase 10 (Wiki — US7)**: Depends on Phase 2 (foundational ADO client, schemas, frontend infrastructure)
+  - Independent of Phases 3-8 (no dependency on scan/compliance features)
+  - Adds wiki methods to existing ADO client, new schemas, new router, new frontend page
+- **Phase 11 (Boards — US8)**: Depends on Phase 2 (foundational ADO client, schemas, frontend infrastructure)
+  - Independent of Phases 3-8 (no dependency on scan/compliance features)
+  - Adds board/work item methods to existing ADO client, new schemas, new router, new frontend page
+  - Shares WorkItemInfo schema with US4 (work item creation) conceptually but is independently implemented
 
 ### Within Each User Story
 

@@ -32,7 +32,10 @@
 ## Notes
 
 - All items pass. Specification is ready for `/speckit.plan`.
-- 6 user stories defined with clear priorities (P1-P6)
-- 15 functional requirements with testable criteria
-- 8 measurable success criteria
-- 5 edge cases documented with resolution strategies
+- 8 user stories defined with clear priorities (P1-P8)
+- 21 functional requirements with testable criteria
+- 12 measurable success criteria
+- 8 edge cases documented with resolution strategies
+- Wiki integration (US7): 3 API endpoints, 3 schemas, 1 frontend page, 3 hooks
+- Boards integration (US8): 4 API endpoints, 6 schemas, 1 frontend page, 3 hooks
+- 11 additional tests covering wiki & boards endpoints

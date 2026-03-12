@@ -112,6 +112,110 @@ Response after creating an ADO work item.
 | url | string | URL to the work item in ADO |
 | title | string | Work item title |
 
+### WikiInfo
+
+Represents a wiki discovered from Azure DevOps (project or code wiki).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Unique wiki identifier (default: "") |
+| name | string | Wiki name (default: "") |
+| type | string | Wiki type: "projectWiki" or "codeWiki" (default: "") |
+| url | string | Wiki URL (default: "") |
+| project_id | string | Associated ADO project ID (default: "") |
+| repository_id | string | Backing Git repository ID (default: "") |
+
+### WikiPage
+
+A single wiki page with optional sub-pages (self-referential/recursive).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Page identifier (default: 0) |
+| path | string | Page path (e.g., "/Architecture/Overview") (default: "/") |
+| content | string | Markdown content of the page (default: "") |
+| git_item_path | string | Path in backing Git repository (default: "") |
+| sub_pages | WikiPage[] | Child pages (recursive, default: []) |
+| remote_url | string | ADO remote URL for the page (default: "") |
+| order | int | Page ordering within parent (default: 0) |
+
+### WikiPageListResponse
+
+Response for listing wiki pages in a tree structure.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| wiki_id | string | Wiki identifier (default: "") |
+| wiki_name | string | Wiki display name (default: "") |
+| pages | WikiPage[] | Flat or hierarchical list of wiki pages (default: []) |
+
+### WorkItemInfo
+
+Represents a single Azure DevOps work item.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Work item ID (default: 0) |
+| title | string | Work item title (default: "") |
+| state | string | Work item state, e.g., "New", "Active", "Closed" (default: "") |
+| work_item_type | string | Type: "User Story", "Bug", "Task", "Epic", "Feature" (default: "") |
+| assigned_to | string | Display name of assignee (default: "") |
+| priority | int | Priority 1-4 (default: 0) |
+| tags | string | Semicolon-separated tags (default: "") |
+| created_date | string | ISO 8601 creation timestamp (default: "") |
+| changed_date | string | ISO 8601 last-modified timestamp (default: "") |
+| url | string | HTML link to the work item in ADO (default: "") |
+
+### WorkItemQueryRequest
+
+Request to execute a custom WIQL query.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| wiql | string | WIQL query string (default: "") |
+| project | string | ADO project name scope (default: "") |
+| top | int | Maximum results to return, 1-500 (default: 200) |
+
+### WorkItemQueryResponse
+
+Response containing work items from a query.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| count | int | Number of work items returned (default: 0) |
+| work_items | WorkItemInfo[] | List of matching work items (default: []) |
+
+### BoardInfo
+
+Represents an Azure DevOps board.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Board identifier (default: "") |
+| name | string | Board name, e.g., "Stories", "Bugs" (default: "") |
+| url | string | Board API URL (default: "") |
+
+### BoardColumn
+
+A column on an Azure DevOps board.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Column identifier (default: "") |
+| name | string | Column name, e.g., "New", "Active", "Resolved" (default: "") |
+| item_limit | int | WIP limit for the column (default: 0) |
+| state_mappings | dict[string, string] | Maps work item type to state, e.g., {"User Story": "Active"} (default: {}) |
+
+### BoardDetailResponse
+
+Detailed board view with columns and associated work items.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| board_name | string | Board name (default: "") |
+| columns | BoardColumn[] | Ordered list of board columns (default: []) |
+| work_items | WorkItemInfo[] | All work items currently on the board (default: []) |
+
 ## Relationships
 
 ```
@@ -125,6 +229,18 @@ ScanProgress (standalone, in-memory state)
 
 CreateStoryRequest → CreateStoryResponse (request/response pair)
   └── references RepoScanResult data
+
+WikiInfo[] (standalone, fetched from ADO Wiki API)
+WikiPageListResponse
+  └── WikiPage[] (1:many, recursive via sub_pages)
+
+BoardInfo[] (standalone, fetched from ADO Boards API)
+BoardDetailResponse
+  ├── BoardColumn[] (1:many, ordered)
+  └── WorkItemInfo[] (1:many)
+
+WorkItemQueryRequest → WorkItemQueryResponse (request/response pair)
+  └── WorkItemInfo[] (1:many)
 ```
 
 ## Compliance Categories (7 total)

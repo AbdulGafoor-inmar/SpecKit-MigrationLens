@@ -105,6 +105,41 @@ The dashboard includes analytics charts: a horizontal bar chart showing repos so
 
 ---
 
+### User Story 7 - Browse Wiki Pages (Priority: P7)
+
+An engineer navigates to the Wiki section of the dashboard to browse project wiki documentation from Azure DevOps. They see a list of available wikis (project wikis and code wikis), select one, and explore the page tree hierarchy. Selecting a page displays its Markdown content rendered in the dashboard. This enables quick access to project documentation alongside compliance data.
+
+**Why this priority**: Wiki integration provides context for migration decisions — engineers can view architecture docs, coding standards, and migration guides directly in the dashboard without context-switching to ADO.
+
+**Independent Test**: Can be tested by navigating to `/wiki`, verifying wikis are listed, selecting a wiki shows its page tree, and clicking a page renders its content.
+
+**Acceptance Scenarios**:
+
+1. **Given** a user has configured ADO credentials, **When** they navigate to the Wiki page, **Then** they see a list of available wikis with name and type (project wiki / code wiki).
+2. **Given** wikis are listed, **When** the user selects a wiki, **Then** a hierarchical page tree is displayed showing all pages and sub-pages.
+3. **Given** the page tree is visible, **When** the user clicks a page, **Then** the page content (Markdown) is displayed in a content viewer panel.
+4. **Given** no wikis exist in the project, **When** the user navigates to the Wiki page, **Then** a helpful "No wikis found" message is displayed.
+
+---
+
+### User Story 8 - View Boards & Work Items (Priority: P8)
+
+An engineering manager navigates to the Boards section to view Azure DevOps boards and work items. They see a list of boards (Stories, Bugs, Features, etc.), select one to view work items organized in a kanban-style board view or a sortable list view. They can also execute custom WIQL queries to filter work items by type, state, or tags. This enables tracking migration work items alongside compliance data.
+
+**Why this priority**: Boards integration closes the loop — managers can view migration work items created from compliance gaps directly in the dashboard, track progress, and filter by state or assignment.
+
+**Independent Test**: Can be tested by navigating to `/boards`, verifying boards are listed, selecting a board shows work items in board or list view, and filtering work items by type/state works.
+
+**Acceptance Scenarios**:
+
+1. **Given** a user has configured ADO credentials, **When** they navigate to the Boards page, **Then** they see a list of available boards with name selectors.
+2. **Given** boards are listed, **When** the user selects a board, **Then** work items are displayed in a kanban board view with column lanes matching board columns.
+3. **Given** work items are displayed, **When** the user toggles to list view, **Then** work items are shown in a table with ID, Title, Type, State, Priority, Assigned To, Tags, and Updated columns.
+4. **Given** the boards page is visible, **When** the user filters by work item type, state, or tags, **Then** only matching work items are displayed.
+5. **Given** the boards page is visible, **When** the user executes a custom WIQL query, **Then** matching work items are returned and displayed.
+
+---
+
 ### Edge Cases
 
 - What happens when ADO credentials are invalid or expired? → Show clear error message with guidance to check PAT token.
@@ -112,6 +147,9 @@ The dashboard includes analytics charts: a horizontal bar chart showing repos so
 - What happens when the cache directory is not writable? → Fall back to in-memory results with a warning log.
 - What happens when a scan is already in progress and user triggers another? → Reject with "Scan already in progress" message.
 - What happens when ADO API rate limits are hit? → Implement retry with exponential backoff, show user-facing warning.
+- What happens when a wiki page path does not exist? → Return null/empty content with a clear message.
+- What happens when a board has no work items? → Display empty columns with a "No work items" placeholder.
+- What happens when a WIQL query is malformed? → Return a 422 validation error with a descriptive message.
 
 ## Requirements *(mandatory)*
 
@@ -132,6 +170,12 @@ The dashboard includes analytics charts: a horizontal bar chart showing repos so
 - **FR-013**: System MUST use a dark theme with glassmorphism design, animated score rings, glow effects, and smooth transitions.
 - **FR-014**: System MUST proxy frontend API calls to the backend via Next.js rewrites to avoid CORS issues.
 - **FR-015**: System MUST provide a health check endpoint for monitoring.
+- **FR-016**: System MUST list and browse Azure DevOps wiki pages (project and code wikis) with hierarchical navigation.
+- **FR-017**: System MUST render wiki page content (Markdown) in a content viewer panel.
+- **FR-018**: System MUST list Azure DevOps boards and display their column configurations.
+- **FR-019**: System MUST display work items in both kanban board view (column lanes) and list/table view.
+- **FR-020**: System MUST support custom WIQL queries to filter work items by type, state, tags, and other criteria.
+- **FR-021**: System MUST support listing work items with filter parameters (work item type, state, tags, top N).
 
 ### Key Entities
 
@@ -141,6 +185,11 @@ The dashboard includes analytics charts: a horizontal bar chart showing repos so
 - **RepoScanResult**: Repository info, list of compliance results, list of category scores, overall score, scan timestamp
 - **DashboardSummary**: Total repos, average score, fully compliant count, needs migration count, .NET version distribution
 - **ScanProgress**: Total repos, completed count, current repo name, percentage, is_scanning flag
+- **WikiInfo**: Wiki ID, name, type (project/code), URL, project ID, repository ID
+- **WikiPage**: Page ID, path, content (Markdown), git item path, sub-pages (recursive), remote URL, order
+- **BoardInfo**: Board ID, name, URL
+- **BoardColumn**: Column ID, name, item limit, state mappings per work item type
+- **WorkItemInfo**: Work item ID, title, state, type, assigned to, priority, tags, created date, changed date, URL
 
 ## Success Criteria *(mandatory)*
 
@@ -154,3 +203,7 @@ The dashboard includes analytics charts: a horizontal bar chart showing repos so
 - **SC-006**: The dashboard renders correctly on screens 1280px wide and above.
 - **SC-007**: All interactive elements provide visual feedback (hover states, loading indicators, toast notifications).
 - **SC-008**: Exported JSON contains complete data matching what is displayed on the dashboard.
+- **SC-009**: Users can browse wiki pages within 2 seconds of selecting a wiki.
+- **SC-010**: Users can switch between board view and list view of work items without data re-fetching.
+- **SC-011**: Custom WIQL queries return results within 3 seconds.
+- **SC-012**: Wiki page tree renders hierarchically with expandable sub-pages.
