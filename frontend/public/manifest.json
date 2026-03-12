@@ -1,0 +1,11 @@
+{
+  "name": "MigrationLens",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any"
+    }
+  ],
+  "theme_color": "#0F172A",
+  "background_color": "#0F172A"
+}
