@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ScanLine, FileBarChart, Settings } from 'lucide-react';
+import { LayoutDashboard, ScanLine, FileBarChart, Settings, BookOpen, Columns } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const navItems = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { label: 'Wiki', href: '/wiki', icon: BookOpen },
+  { label: 'Boards', href: '/boards', icon: Columns },
   { label: 'Scan', href: '/scan', icon: ScanLine },
   { label: 'Reports', href: '/reports', icon: FileBarChart },
   { label: 'Settings', href: '/settings', icon: Settings },

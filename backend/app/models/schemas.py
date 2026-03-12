@@ -85,7 +85,78 @@ class ScanProgress(BaseModel):
     started_at: str = ""
 
 
+# ── Wiki ────────────────────────────────────────────────────────────────────
+
+
+class WikiInfo(BaseModel):
+    id: str = ""
+    name: str = ""
+    type: str = ""  # "projectWiki" or "codeWiki"
+    url: str = ""
+    project_id: str = ""
+    repository_id: str = ""
+
+
+class WikiPage(BaseModel):
+    id: int = 0
+    path: str = "/"
+    content: str = ""
+    git_item_path: str = ""
+    sub_pages: list["WikiPage"] = Field(default_factory=list)
+    remote_url: str = ""
+    order: int = 0
+
+
+class WikiPageListResponse(BaseModel):
+    wiki_id: str = ""
+    wiki_name: str = ""
+    pages: list[WikiPage] = Field(default_factory=list)
+
+
 # ── Work Items ──────────────────────────────────────────────────────────────
+
+
+class WorkItemInfo(BaseModel):
+    id: int = 0
+    title: str = ""
+    state: str = ""
+    work_item_type: str = ""
+    assigned_to: str = ""
+    priority: int = 0
+    tags: str = ""
+    created_date: str = ""
+    changed_date: str = ""
+    url: str = ""
+
+
+class WorkItemQueryRequest(BaseModel):
+    wiql: str = ""
+    project: str = ""
+    top: int = Field(default=200, ge=1, le=500)
+
+
+class WorkItemQueryResponse(BaseModel):
+    count: int = 0
+    work_items: list[WorkItemInfo] = Field(default_factory=list)
+
+
+class BoardInfo(BaseModel):
+    id: str = ""
+    name: str = ""
+    url: str = ""
+
+
+class BoardColumn(BaseModel):
+    id: str = ""
+    name: str = ""
+    item_limit: int = 0
+    state_mappings: dict[str, str] = Field(default_factory=dict)
+
+
+class BoardDetailResponse(BaseModel):
+    board_name: str = ""
+    columns: list[BoardColumn] = Field(default_factory=list)
+    work_items: list[WorkItemInfo] = Field(default_factory=list)
 
 
 class CreateStoryRequest(BaseModel):

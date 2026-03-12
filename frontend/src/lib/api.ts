@@ -9,6 +9,12 @@ import type {
   CreateStoryResponse,
   HealthResponse,
   ExportFormat,
+  WikiInfo,
+  WikiPage,
+  WikiPageListResponse,
+  BoardInfo,
+  BoardDetailResponse,
+  WorkItemQueryResponse,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -102,3 +108,66 @@ export function getExportUrl(
 }
 
 export { ApiError };
+
+/* ── Wiki ── */
+export async function listWikis(project?: string): Promise<WikiInfo[]> {
+  const params = new URLSearchParams();
+  if (project) params.set('project', project);
+  const qs = params.toString();
+  return request<WikiInfo[]>(`/wiki${qs ? `?${qs}` : ''}`);
+}
+
+export async function getWikiPage(
+  wikiId: string,
+  path: string = '/',
+  project?: string,
+): Promise<WikiPage> {
+  const params = new URLSearchParams({ path });
+  if (project) params.set('project', project);
+  return request<WikiPage>(`/wiki/${wikiId}/page?${params.toString()}`);
+}
+
+export async function listWikiPages(
+  wikiId: string,
+  path: string = '/',
+  project?: string,
+): Promise<WikiPageListResponse> {
+  const params = new URLSearchParams({ path });
+  if (project) params.set('project', project);
+  return request<WikiPageListResponse>(`/wiki/${wikiId}/pages?${params.toString()}`);
+}
+
+/* ── Boards ── */
+export async function listBoards(project?: string, team?: string): Promise<BoardInfo[]> {
+  const params = new URLSearchParams();
+  if (project) params.set('project', project);
+  if (team) params.set('team', team);
+  const qs = params.toString();
+  return request<BoardInfo[]>(`/boards${qs ? `?${qs}` : ''}`);
+}
+
+export async function getBoardDetail(
+  boardName: string,
+  project?: string,
+  team?: string,
+): Promise<BoardDetailResponse> {
+  const params = new URLSearchParams();
+  if (project) params.set('project', project);
+  if (team) params.set('team', team);
+  const qs = params.toString();
+  return request<BoardDetailResponse>(`/boards/${boardName}${qs ? `?${qs}` : ''}`);
+}
+
+export async function listWorkItems(
+  project?: string,
+  workItemType: string = 'User Story',
+  state?: string,
+  tags?: string,
+  top: number = 200,
+): Promise<WorkItemQueryResponse> {
+  const params = new URLSearchParams({ work_item_type: workItemType, top: String(top) });
+  if (project) params.set('project', project);
+  if (state) params.set('state', state);
+  if (tags) params.set('tags', tags);
+  return request<WorkItemQueryResponse>(`/boards/workitems/list?${params.toString()}`);
+}

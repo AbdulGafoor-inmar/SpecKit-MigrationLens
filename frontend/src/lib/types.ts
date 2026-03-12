@@ -118,6 +118,72 @@ export const STATUS_MAP: Record<ComplianceStatus, { color: string; bg: string; l
   na: { color: 'text-slate-400', bg: 'bg-slate-500/20', label: 'N/A' },
 };
 
+/* ── Wiki types ── */
+
+export interface WikiInfo {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  project_id: string;
+  repository_id: string;
+}
+
+export interface WikiPage {
+  id: number;
+  path: string;
+  content: string;
+  git_item_path: string;
+  sub_pages: WikiPage[];
+  remote_url: string;
+  order: number;
+}
+
+export interface WikiPageListResponse {
+  wiki_id: string;
+  wiki_name: string;
+  pages: WikiPage[];
+}
+
+/* ── Board / Work Item types ── */
+
+export interface WorkItemInfo {
+  id: number;
+  title: string;
+  state: string;
+  work_item_type: string;
+  assigned_to: string;
+  priority: number;
+  tags: string;
+  created_date: string;
+  changed_date: string;
+  url: string;
+}
+
+export interface WorkItemQueryResponse {
+  count: number;
+  work_items: WorkItemInfo[];
+}
+
+export interface BoardInfo {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface BoardColumn {
+  id: string;
+  name: string;
+  item_limit: number;
+  state_mappings: Record<string, string>;
+}
+
+export interface BoardDetailResponse {
+  board_name: string;
+  columns: BoardColumn[];
+  work_items: WorkItemInfo[];
+}
+
 export const COMPLIANCE_CATEGORIES = [
   'SDK & Runtime',
   'Language Features',

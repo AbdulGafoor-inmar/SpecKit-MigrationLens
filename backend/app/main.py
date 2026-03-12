@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.api import dashboard, export, health, repos, scan, workitems
+from app.api import boards, dashboard, export, health, repos, scan, wiki, workitems
 
 structlog.configure(
     processors=[
@@ -56,6 +56,8 @@ def create_app() -> FastAPI:
     app.include_router(scan.router, prefix="/api", tags=["Scan"])
     app.include_router(repos.router, prefix="/api", tags=["Repositories"])
     app.include_router(workitems.router, prefix="/api", tags=["Work Items"])
+    app.include_router(boards.router, prefix="/api", tags=["Boards"])
+    app.include_router(wiki.router, prefix="/api", tags=["Wiki"])
     app.include_router(export.router, prefix="/api", tags=["Export"])
 
     return app
