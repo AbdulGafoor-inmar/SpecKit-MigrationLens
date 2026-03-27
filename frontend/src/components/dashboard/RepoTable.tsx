@@ -2,13 +2,31 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Globe, Clock, Cog, Library } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, ScoreRing } from '@/components/ui';
-import type { RepoScanResult } from '@/lib/types';
+import type { RepoScanResult, AppType } from '@/lib/types';
 
 interface RepoTableProps {
   repos: RepoScanResult[];
+}
+
+const appTypeConfig: Record<AppType, { label: string; color: string; icon: typeof Globe }> = {
+  api:     { label: 'API',     color: 'text-plum bg-plum-50',              icon: Globe },
+  cronjob: { label: 'CronJob', color: 'text-goldenrod bg-goldenrod-50',    icon: Clock },
+  worker:  { label: 'Worker',  color: 'text-plum-300 bg-plum-50',          icon: Cog },
+  library: { label: 'Library', color: 'text-frost-dark bg-surface-tertiary', icon: Library },
+};
+
+function AppTypeBadge({ type }: { type: AppType }) {
+  const config = appTypeConfig[type] || appTypeConfig.library;
+  const Icon = config.icon;
+  return (
+    <span className={clsx('inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded', config.color)}>
+      <Icon className="h-3 w-3" />
+      {config.label}
+    </span>
+  );
 }
 
 const rowVariant = {
@@ -18,27 +36,30 @@ const rowVariant = {
 
 export function RepoTable({ repos }: RepoTableProps) {
   return (
-    <div className="glass overflow-hidden">
-      <div className="px-6 py-4 border-b border-white/[0.06]">
-        <h3 className="text-sm font-semibold text-white">Repository Compliance</h3>
+    <div className="brand-card overflow-hidden">
+      <div className="px-6 py-4 border-b border-frost">
+        <h3 className="text-sm font-semibold text-plum-dark">Repository Compliance</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/[0.06] text-left">
-              <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
+            <tr className="border-b border-frost text-left">
+              <th className="px-6 py-3 text-xs font-medium text-frost-dark uppercase tracking-wider">
                 Repository
               </th>
-              <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
+              <th className="px-6 py-3 text-xs font-medium text-frost-dark uppercase tracking-wider">
+                Type
+              </th>
+              <th className="px-6 py-3 text-xs font-medium text-frost-dark uppercase tracking-wider">
                 Score
               </th>
-              <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
+              <th className="px-6 py-3 text-xs font-medium text-frost-dark uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
+              <th className="px-6 py-3 text-xs font-medium text-frost-dark uppercase tracking-wider">
                 .NET Version
               </th>
-              <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
+              <th className="px-6 py-3 text-xs font-medium text-frost-dark uppercase tracking-wider">
                 Complexity
               </th>
               <th className="px-6 py-3" />
@@ -53,20 +74,23 @@ export function RepoTable({ repos }: RepoTableProps) {
               <motion.tr
                 key={repo.repository.id}
                 variants={rowVariant}
-                className="table-row-hover border-b border-white/[0.03]"
+                className="table-row-hover border-b border-frost/50"
               >
                 <td className="px-6 py-3">
-                  <span className="font-medium text-white">{repo.repository.name}</span>
+                  <span className="font-medium text-plum-dark">{repo.repository.name}</span>
+                </td>
+                <td className="px-6 py-3">
+                  <AppTypeBadge type={repo.repository.app_type || 'api'} />
                 </td>
                 <td className="px-6 py-3">
                   <div className="flex items-center gap-2">
                     <ScoreRing score={repo.overall_score} size={32} strokeWidth={3} showLabel={false} />
                     <span
                       className={clsx('font-semibold', {
-                        'text-emerald-400': repo.overall_score >= 80,
-                        'text-amber-400': repo.overall_score >= 60 && repo.overall_score < 80,
-                        'text-orange-400': repo.overall_score >= 40 && repo.overall_score < 60,
-                        'text-rose-400': repo.overall_score < 40,
+                        'text-teal': repo.overall_score >= 80,
+                        'text-goldenrod': repo.overall_score >= 60 && repo.overall_score < 80,
+                        'text-sunset': repo.overall_score >= 40 && repo.overall_score < 60,
+                        'text-red-500': repo.overall_score < 40,
                       })}
                     >
                       {Math.round(repo.overall_score)}%
@@ -76,15 +100,15 @@ export function RepoTable({ repos }: RepoTableProps) {
                 <td className="px-6 py-3">
                   <StatusBadge status={repo.compliance_status} />
                 </td>
-                <td className="px-6 py-3 text-slate-300">
+                <td className="px-6 py-3 text-plum-dark/80">
                   {repo.dotnet_version || '—'}
                 </td>
                 <td className="px-6 py-3">
                   <span
                     className={clsx('text-xs font-medium px-2 py-0.5 rounded', {
-                      'text-emerald-400 bg-emerald-500/10': repo.complexity === 'simple',
-                      'text-amber-400 bg-amber-500/10': repo.complexity === 'moderate',
-                      'text-rose-400 bg-rose-500/10': repo.complexity === 'complex',
+                      'text-teal bg-teal-50': repo.complexity === 'simple',
+                      'text-goldenrod bg-goldenrod-50': repo.complexity === 'moderate',
+                      'text-sunset bg-sunset-50': repo.complexity === 'complex',
                     })}
                   >
                     {repo.complexity}
@@ -93,7 +117,7 @@ export function RepoTable({ repos }: RepoTableProps) {
                 <td className="px-6 py-3">
                   <Link
                     href={`/repos/${repo.repository.id}`}
-                    className="inline-flex items-center gap-1 text-xs text-accent-blue hover:text-blue-300 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-plum hover:text-teal transition-colors"
                   >
                     Details <ArrowUpRight className="h-3 w-3" />
                   </Link>

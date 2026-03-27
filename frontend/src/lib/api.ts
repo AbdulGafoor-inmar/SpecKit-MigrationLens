@@ -15,9 +15,15 @@ import type {
   BoardInfo,
   BoardDetailResponse,
   WorkItemQueryResponse,
+  AppSettings,
+  ADORepository,
+  MigrationReport,
+  AIAnalysisResponse,
+  PullRequestInfo,
+  PRReviewResult,
 } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 class ApiError extends Error {
   constructor(
@@ -65,15 +71,20 @@ export async function getDashboard(
 export async function startScan(
   organization?: string,
   project?: string,
+  repoIds?: string[],
 ): Promise<ScanStartResponse> {
   return request<ScanStartResponse>('/scan', {
     method: 'POST',
-    body: JSON.stringify({ organization, project }),
+    body: JSON.stringify({ organization, project, repo_ids: repoIds ?? [] }),
   });
 }
 
 export async function getScanProgress(): Promise<ScanProgress> {
   return request<ScanProgress>('/scan/progress');
+}
+
+export async function stopScan(): Promise<{ message: string }> {
+  return request<{ message: string }>('/scan/stop', { method: 'POST' });
 }
 
 /* ── Repository detail ── */
@@ -85,6 +96,18 @@ export async function getRepoDetail(
   if (organization) params.set('organization', organization);
   const qs = params.toString();
   return request<RepoScanResult>(`/repos/${repoId}${qs ? `?${qs}` : ''}`);
+}
+
+/* ── List repos from ADO (pre-scan) ── */
+export async function listRepos(
+  organization?: string,
+  project?: string,
+): Promise<ADORepository[]> {
+  const params = new URLSearchParams();
+  if (organization) params.set('organization', organization);
+  if (project) params.set('project', project);
+  const qs = params.toString();
+  return request<ADORepository[]>(`/repos${qs ? `?${qs}` : ''}`);
 }
 
 /* ── Work items ── */
@@ -170,4 +193,72 @@ export async function listWorkItems(
   if (state) params.set('state', state);
   if (tags) params.set('tags', tags);
   return request<WorkItemQueryResponse>(`/boards/workitems/list?${params.toString()}`);
+}
+
+/* ── Settings ── */
+export async function getSettings(): Promise<AppSettings> {
+  return request<AppSettings>('/settings');
+}
+
+/* ── Migration Report ── */
+export async function getMigrationReport(
+  repoId: string,
+  organization?: string,
+  project?: string,
+): Promise<MigrationReport> {
+  const params = new URLSearchParams();
+  if (organization) params.set('organization', organization);
+  if (project) params.set('project', project);
+  const qs = params.toString();
+  return request<MigrationReport>(`/repos/${repoId}/migration-report${qs ? `?${qs}` : ''}`);
+}
+
+/* ── AI Analysis ── */
+export async function getAIAnalysis(
+  repoId: string,
+  organization?: string,
+): Promise<AIAnalysisResponse> {
+  const params = new URLSearchParams();
+  if (organization) params.set('organization', organization);
+  const qs = params.toString();
+  return request<AIAnalysisResponse>(`/repos/${repoId}/ai-analysis${qs ? `?${qs}` : ''}`);
+}
+
+export async function getAIHealth(): Promise<{ status: string; model: string; message: string }> {
+  return request<{ status: string; model: string; message: string }>('/ai/health');
+}
+
+/* ── PR Review ── */
+export async function listPullRequests(
+  repoId: string,
+  status: string = 'all',
+): Promise<PullRequestInfo[]> {
+  const params = new URLSearchParams({ status });
+  return request<PullRequestInfo[]>(`/repos/${repoId}/pull-requests?${params.toString()}`);
+}
+
+export async function runPRReview(
+  repoId: string,
+  prId: number,
+): Promise<PRReviewResult> {
+  return request<PRReviewResult>(`/repos/${repoId}/pull-requests/${prId}/review`);
+}
+
+export async function postPRComment(
+  repoId: string,
+  prId: number,
+  review: PRReviewResult,
+): Promise<{ status: string; thread_id: number }> {
+  return request<{ status: string; thread_id: number }>(
+    `/repos/${repoId}/pull-requests/${prId}/comment`,
+    {
+      method: 'POST',
+      body: JSON.stringify(review),
+    },
+  );
+}
+
+/* ── Auto-Fix ── */
+export function getAutoFixStreamUrl(repoId: string): string {
+  return `${API_BASE}/autofix/${repoId}`;
 }

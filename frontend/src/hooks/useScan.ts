@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ScanProgress } from '@/lib/types';
-import { getScanProgress, startScan } from '@/lib/api';
+import { getScanProgress, startScan, stopScan } from '@/lib/api';
 
 interface UseScanReturn {
   progress: ScanProgress | null;
   isScanning: boolean;
   error: string | null;
-  start: () => void;
+  start: (repoIds?: string[]) => void;
+  stop: () => void;
 }
 
 export function useScan(onComplete?: () => void): UseScanReturn {
@@ -28,7 +29,9 @@ export function useScan(onComplete?: () => void): UseScanReturn {
     try {
       const p = await getScanProgress();
       setProgress(p);
-      if (!p.is_scanning) {
+      if (p.is_scanning) {
+        setIsScanning(true);
+      } else {
         setIsScanning(false);
         stopPolling();
         onComplete?.();
@@ -38,19 +41,30 @@ export function useScan(onComplete?: () => void): UseScanReturn {
     }
   }, [stopPolling, onComplete]);
 
-  const start = useCallback(async () => {
+  const startPolling = useCallback(() => {
+    stopPolling();
+    intervalRef.current = setInterval(poll, 2000);
+    poll();
+  }, [poll, stopPolling]);
+
+  const start = useCallback(async (repoIds?: string[]) => {
     setError(null);
+    setIsScanning(true);
     try {
-      await startScan();
-      setIsScanning(true);
-      // poll every 2 seconds
-      intervalRef.current = setInterval(poll, 2000);
-      poll(); // immediate first check
+      await startScan(undefined, undefined, repoIds);
+      startPolling();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to start scan';
+      // If a scan is already in progress on the backend, sync our state
+      if (msg.includes('already in progress') || msg.includes('409')) {
+        setIsScanning(true);
+        startPolling();
+      } else {
+        setIsScanning(false);
+      }
       setError(msg);
     }
-  }, [poll]);
+  }, [startPolling]);
 
   // Check if a scan is already in progress on mount
   useEffect(() => {
@@ -59,13 +73,25 @@ export function useScan(onComplete?: () => void): UseScanReturn {
         setProgress(p);
         if (p.is_scanning) {
           setIsScanning(true);
-          intervalRef.current = setInterval(poll, 2000);
+          startPolling();
         }
       })
       .catch(() => {});
 
     return stopPolling;
-  }, [poll, stopPolling]);
+  }, [startPolling, stopPolling]);
 
-  return { progress, isScanning, error, start };
+  const stop = useCallback(async () => {
+    setError(null);
+    try {
+      await stopScan();
+      // Poll once to update state
+      setTimeout(poll, 500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to stop scan';
+      setError(msg);
+    }
+  }, [poll]);
+
+  return { progress, isScanning, error, start, stop };
 }

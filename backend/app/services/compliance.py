@@ -31,19 +31,21 @@ class ComplianceEngine:
 
     def evaluate(
         self,
-        csproj_contents: list[str],
-        cs_contents: list[str],
+        csproj_files: list[tuple[str, str]],
+        cs_files: list[tuple[str, str]],
         file_list: list[str],
         extra_files: dict[str, str] | None = None,
+        app_type: str = "api",
     ) -> tuple[list[ComplianceResult], list[CategoryScore]]:
         """
         Evaluate all rules against repository contents.
 
         Args:
-            csproj_contents: List of .csproj file contents
-            cs_contents: List of .cs file contents
+            csproj_files: List of (file_path, content) tuples for .csproj files
+            cs_files: List of (file_path, content) tuples for .cs files
             file_list: List of all file paths in the repo
             extra_files: Mapping of specific file names to their content
+            app_type: Detected application type (api, cronjob, worker, library)
 
         Returns:
             Tuple of (individual results, category scores)
@@ -54,56 +56,111 @@ class ComplianceEngine:
         for category in self._rules:
             cat_name = category["name"]
             for rule in category.get("rules", []):
+                # Filter by applies_to — skip rules not applicable to this app type
+                applies_to = rule.get("applies_to", None)
+                if applies_to is not None:
+                    # applies_to is a list like ["api"] or ["cronjob"]
+                    if app_type not in applies_to:
+                        # Mark as N/A — rule doesn't apply to this app type
+                        all_results.append(
+                            ComplianceResult(
+                                rule_id=rule["id"],
+                                rule_name=rule["name"],
+                                category=cat_name,
+                                status=ComplianceStatus.NA,
+                                severity=Severity(rule.get("severity", "medium")),
+                                details=f"Not applicable to {app_type} applications",
+                            )
+                        )
+                        continue
+
                 result = self._evaluate_rule(
-                    rule, cat_name, csproj_contents, cs_contents, file_list, extra_files
+                    rule, cat_name, csproj_files, cs_files, file_list, extra_files
                 )
                 all_results.append(result)
 
         category_scores = self._compute_category_scores(all_results)
         return all_results, category_scores
 
+    def _find_line_number(self, content: str, pattern: str, flags: int = 0) -> tuple[int | None, str]:
+        """Find the line number and matching text for a pattern in content."""
+        match = re.search(pattern, content, flags)
+        if not match:
+            return None, ""
+        # Count lines up to match start
+        line_num = content[:match.start()].count('\n') + 1
+        # Get the full line containing the match
+        lines = content.split('\n')
+        if 0 < line_num <= len(lines):
+            return line_num, lines[line_num - 1].strip()
+        return line_num, match.group(0).strip()
+
     def _evaluate_rule(
         self,
         rule: dict[str, Any],
         category: str,
-        csproj_contents: list[str],
-        cs_contents: list[str],
+        csproj_files: list[tuple[str, str]],
+        cs_files: list[tuple[str, str]],
         file_list: list[str],
         extra_files: dict[str, str],
     ) -> ComplianceResult:
-        """Evaluate a single compliance rule."""
+        """Evaluate a single compliance rule, tracking file path and line number."""
         rule_id = rule["id"]
         check_type = rule.get("check_type", "")
         pattern = rule.get("pattern", "")
         fail_message = rule.get("fail_message", "")
+        migration_guide = rule.get("migration_guide", "")
+        suggested_fix = rule.get("suggested_fix", "")
+        rule_description = rule.get("description", rule.get("name", ""))
 
         status = ComplianceStatus.NA
         details = ""
+        found_file_path: str | None = None
+        found_line_number: int | None = None
+        found_current_code: str = ""
 
         try:
             if check_type == "csproj_contains":
-                if not csproj_contents:
+                if not csproj_files:
                     status = ComplianceStatus.NA
                     details = "No .csproj files found"
                 else:
-                    found = any(
-                        re.search(pattern, content, re.IGNORECASE)
-                        for content in csproj_contents
-                    )
+                    found = False
+                    for fpath, content in csproj_files:
+                        if re.search(pattern, content, re.IGNORECASE):
+                            found = True
+                            line_num, line_text = self._find_line_number(content, pattern, re.IGNORECASE)
+                            found_file_path = fpath
+                            found_line_number = line_num
+                            found_current_code = line_text
+                            break
                     status = ComplianceStatus.PASS if found else ComplianceStatus.FAIL
-                    details = "" if found else fail_message
+                    if found:
+                        details = f"Verified — {rule_description}"
+                    else:
+                        details = fail_message
+                        # Point to the first csproj as the file to modify
+                        found_file_path = csproj_files[0][0]
 
             elif check_type == "csproj_not_contains":
-                if not csproj_contents:
+                if not csproj_files:
                     status = ComplianceStatus.NA
                     details = "No .csproj files found"
                 else:
-                    found = any(
-                        re.search(pattern, content, re.IGNORECASE)
-                        for content in csproj_contents
-                    )
+                    found = False
+                    for fpath, content in csproj_files:
+                        if re.search(pattern, content, re.IGNORECASE):
+                            found = True
+                            line_num, line_text = self._find_line_number(content, pattern, re.IGNORECASE)
+                            found_file_path = fpath
+                            found_line_number = line_num
+                            found_current_code = line_text
+                            break
                     status = ComplianceStatus.FAIL if found else ComplianceStatus.PASS
-                    details = fail_message if found else ""
+                    if found:
+                        details = fail_message
+                    else:
+                        details = f"Verified — {rule_description}"
 
             elif check_type == "file_exists":
                 patterns = pattern.split("|")
@@ -111,25 +168,39 @@ class ComplianceEngine:
                     any(p.lower() in f.lower() for f in file_list) for p in patterns
                 )
                 status = ComplianceStatus.PASS if found else ComplianceStatus.FAIL
-                details = "" if found else fail_message
+                details = f"Verified — {rule_description}" if found else fail_message
 
             elif check_type == "cs_pattern":
-                if not cs_contents:
+                if not cs_files:
                     status = ComplianceStatus.NA
                     details = "No .cs files found"
                 else:
-                    found = any(
-                        re.search(pattern, content, re.MULTILINE)
-                        for content in cs_contents
-                    )
+                    found = False
+                    for fpath, content in cs_files:
+                        if re.search(pattern, content, re.MULTILINE):
+                            found = True
+                            line_num, line_text = self._find_line_number(content, pattern, re.MULTILINE)
+                            found_file_path = fpath
+                            found_line_number = line_num
+                            found_current_code = line_text
+                            break
                     status = ComplianceStatus.PASS if found else ComplianceStatus.FAIL
-                    details = "" if found else fail_message
+                    if found:
+                        details = f"Verified — {rule_description}"
+                    else:
+                        details = fail_message
+                        found_file_path = cs_files[0][0]
 
             elif check_type == "file_contains":
                 target_file = rule.get("file", "")
+                # Try exact match first, then fuzzy match (e.g. "deployment.yaml" matches "api-deployment.yaml")
                 content = extra_files.get(target_file, "")
                 if not content:
-                    # Check if the file exists at all
+                    for key, val in extra_files.items():
+                        if target_file.lower() in key.lower():
+                            content = val
+                            break
+                if not content:
                     file_found = any(target_file.lower() in f.lower() for f in file_list)
                     if not file_found:
                         status = ComplianceStatus.NA
@@ -137,10 +208,24 @@ class ComplianceEngine:
                     else:
                         status = ComplianceStatus.FAIL
                         details = fail_message
+                        # Find the file path
+                        matching = [f for f in file_list if target_file.lower() in f.lower()]
+                        if matching:
+                            found_file_path = matching[0]
                 else:
-                    found = bool(re.search(pattern, content, re.IGNORECASE))
-                    status = ComplianceStatus.PASS if found else ComplianceStatus.FAIL
-                    details = "" if found else fail_message
+                    match_found = bool(re.search(pattern, content, re.IGNORECASE))
+                    status = ComplianceStatus.PASS if match_found else ComplianceStatus.FAIL
+                    if match_found:
+                        line_num, line_text = self._find_line_number(content, pattern, re.IGNORECASE)
+                        found_line_number = line_num
+                        found_current_code = line_text
+                        details = f"Verified — {rule_description}"
+                    else:
+                        details = fail_message
+                    # Find the file path
+                    matching = [f for f in file_list if target_file.lower() in f.lower()]
+                    if matching:
+                        found_file_path = matching[0]
             else:
                 status = ComplianceStatus.NA
                 details = f"Unknown check type: {check_type}"
@@ -157,6 +242,11 @@ class ComplianceEngine:
             status=status,
             severity=Severity(rule.get("severity", "medium")),
             details=details,
+            file_path=found_file_path,
+            line_number=found_line_number,
+            current_code=found_current_code,
+            suggested_fix=suggested_fix if status == ComplianceStatus.FAIL else "",
+            migration_guide=migration_guide if status == ComplianceStatus.FAIL else "",
         )
 
     def _compute_category_scores(

@@ -15,7 +15,7 @@ interface VersionPieChartProps {
   repos: RepoScanResult[];
 }
 
-const COLORS = ['#60A5FA', '#A78BFA', '#34D399', '#FBBF24', '#FB7185', '#22D3EE', '#F97316'];
+const COLORS = ['#303584', '#03878C', '#F15A22', '#FFC20E', '#1D1655', '#4A4FB0', '#05A5AB'];
 
 export function VersionPieChart({ repos }: VersionPieChartProps) {
   const versionCounts = repos.reduce<Record<string, number>>((acc, repo) => {
@@ -30,7 +30,7 @@ export function VersionPieChart({ repos }: VersionPieChartProps) {
 
   return (
     <GlassCard hover={false}>
-      <h3 className="text-sm font-semibold text-white mb-4">.NET Version Distribution</h3>
+      <h3 className="text-sm font-semibold text-plum-dark mb-4">.NET Version Distribution</h3>
       <ResponsiveContainer width="100%" height={300}>
         <PieChart>
           <Pie
@@ -49,15 +49,16 @@ export function VersionPieChart({ repos }: VersionPieChartProps) {
           </Pie>
           <Tooltip
             contentStyle={{
-              backgroundColor: '#1E293B',
-              border: '1px solid rgba(255,255,255,0.1)',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #DEDCE4',
               borderRadius: '12px',
               fontSize: '12px',
-              color: '#F1F5F9',
+              color: '#1D1655',
+              boxShadow: '0 4px 12px rgba(48,53,132,0.08)',
             }}
           />
           <Legend
-            wrapperStyle={{ fontSize: '11px', color: '#94A3B8' }}
+            wrapperStyle={{ fontSize: '11px', color: '#A0A0B5' }}
             iconType="circle"
             iconSize={8}
           />

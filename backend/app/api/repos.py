@@ -1,11 +1,58 @@
-"""Repository detail endpoint."""
+"""Repository endpoints — list and detail."""
 
 from fastapi import APIRouter, HTTPException, Path, Query
 
-from app.models.schemas import RepoScanResult
+from app.config import get_settings
+from app.models.schemas import RepoScanResult, RepositoryInfo
+from app.services.ado_client import ADOClient
 from app.services.cache import CacheManager
 
 router = APIRouter()
+
+
+@router.get("/repos", response_model=list[RepositoryInfo])
+async def list_repositories(
+    organization: str = Query("", description="ADO organization name (uses default if empty)"),
+    project: str = Query("", description="Optional project filter"),
+) -> list[RepositoryInfo]:
+    """List all Git repositories from Azure DevOps."""
+    settings = get_settings()
+    org = organization or settings.ado_organization
+    proj = project or settings.ado_project
+
+    if not org:
+        raise HTTPException(status_code=400, detail="Organization name is required")
+
+    # Check in-memory cache first to avoid hitting ADO on every page load
+    from app.services.cache import mem_get, mem_set
+
+    cache_key = f"repos_list:{org}:{proj}"
+    cached_repos = mem_get(cache_key)
+    if cached_repos is not None:
+        return cached_repos
+
+    client = ADOClient(organization=org)
+    repos_raw = await client.list_repositories(proj)
+
+    repos: list[RepositoryInfo] = []
+    for r in repos_raw:
+        default_branch = (
+            r.get("defaultBranch", "refs/heads/main").replace("refs/heads/", "")
+        )
+        repos.append(
+            RepositoryInfo(
+                id=r.get("id", ""),
+                name=r.get("name", ""),
+                url=r.get("webUrl", r.get("remoteUrl", "")),
+                default_branch=default_branch,
+                project=r.get("project", {}).get("name", proj),
+                dotnet_version="unknown",
+                last_commit_date="",
+            )
+        )
+
+    mem_set(cache_key, repos)
+    return repos
 
 
 @router.get("/repos/{repo_id}", response_model=RepoScanResult)

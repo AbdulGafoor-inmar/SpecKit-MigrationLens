@@ -1,0 +1,251 @@
+# MigrationLens Compliance Rules
+# .NET 10 / C# 14 Modernization Standards
+# Each rule: id, name, category, severity, description, check_type, expected
+
+categories:
+  - name: "SDK & Runtime"
+    rules:
+      - id: SDK-001
+        name: "Target Framework is .NET 10"
+        severity: critical
+        description: "Project must target net10.0"
+        check_type: csproj_contains
+        pattern: "<TargetFramework>net10.0</TargetFramework>"
+        fail_message: "Project does not target net10.0"
+
+      - id: SDK-002
+        name: "Global.json SDK Version"
+        severity: high
+        description: "Solution should pin SDK version via global.json"
+        check_type: file_exists
+        pattern: "global.json"
+        fail_message: "No global.json found to pin SDK version"
+
+      - id: SDK-003
+        name: "Runtime Identifier Specified"
+        severity: medium
+        description: "RuntimeIdentifier should be specified for deployment"
+        check_type: csproj_contains
+        pattern: "<RuntimeIdentifier"
+        fail_message: "No RuntimeIdentifier specified in project file"
+
+      - id: SDK-004
+        name: "No Deprecated Target Frameworks"
+        severity: critical
+        description: "Must not target EOL frameworks (net5.0, netcoreapp3.1, net48)"
+        check_type: csproj_not_contains
+        pattern: "net5.0|netcoreapp3.1|netcoreapp2.1|net48|net472|net461"
+        fail_message: "Project targets a deprecated/EOL framework"
+
+  - name: "Language Features"
+    rules:
+      - id: LANG-001
+        name: "C# 14 Language Version"
+        severity: high
+        description: "LangVersion should be set to 14 or latest"
+        check_type: csproj_contains
+        pattern: "<LangVersion>14</LangVersion>|<LangVersion>latest</LangVersion>|<LangVersion>preview</LangVersion>"
+        fail_message: "LangVersion not set to 14 or latest"
+
+      - id: LANG-002
+        name: "File-Scoped Namespaces"
+        severity: low
+        description: "C# files should use file-scoped namespace declarations"
+        check_type: cs_pattern
+        pattern: "^namespace .+;$"
+        fail_message: "Not using file-scoped namespaces"
+
+      - id: LANG-003
+        name: "Primary Constructors Usage"
+        severity: low
+        description: "Consider using primary constructors for simple classes"
+        check_type: cs_pattern
+        pattern: "class \\w+\\("
+        fail_message: "No primary constructor usage detected"
+
+      - id: LANG-004
+        name: "Collection Expressions"
+        severity: low
+        description: "Consider using collection expressions ([]) syntax"
+        check_type: cs_pattern
+        pattern: "\\[.*\\]"
+        fail_message: "No collection expression syntax detected"
+
+  - name: "Project Configuration"
+    rules:
+      - id: CFG-001
+        name: "Nullable Reference Types Enabled"
+        severity: high
+        description: "Nullable reference types should be enabled"
+        check_type: csproj_contains
+        pattern: "<Nullable>enable</Nullable>"
+        fail_message: "Nullable reference types not enabled"
+
+      - id: CFG-002
+        name: "Implicit Usings Enabled"
+        severity: medium
+        description: "ImplicitUsings should be enabled for cleaner code"
+        check_type: csproj_contains
+        pattern: "<ImplicitUsings>enable</ImplicitUsings>"
+        fail_message: "ImplicitUsings not enabled"
+
+      - id: CFG-003
+        name: "Central Package Management"
+        severity: medium
+        description: "Should use Directory.Packages.props for centralized versioning"
+        check_type: file_exists
+        pattern: "Directory.Packages.props"
+        fail_message: "No Directory.Packages.props found"
+
+      - id: CFG-004
+        name: "Treat Warnings as Errors"
+        severity: medium
+        description: "TreatWarningsAsErrors should be enabled"
+        check_type: csproj_contains
+        pattern: "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>"
+        fail_message: "TreatWarningsAsErrors not enabled"
+
+      - id: CFG-005
+        name: "EditorConfig Present"
+        severity: low
+        description: "Repository should have an .editorconfig file"
+        check_type: file_exists
+        pattern: ".editorconfig"
+        fail_message: "No .editorconfig file found"
+
+  - name: "NuGet & Dependencies"
+    rules:
+      - id: PKG-001
+        name: "No Deprecated Packages"
+        severity: high
+        description: "Should not reference known deprecated NuGet packages"
+        check_type: csproj_not_contains
+        pattern: "Microsoft.AspNetCore.Mvc.NewtonsoftJson|Newtonsoft.Json"
+        fail_message: "References deprecated package (prefer System.Text.Json)"
+
+      - id: PKG-002
+        name: "Package Versions Specified"
+        severity: medium
+        description: "All PackageReference elements should have Version attribute"
+        check_type: csproj_contains
+        pattern: "PackageReference Include"
+        fail_message: "Missing or incomplete PackageReference definitions"
+
+      - id: PKG-003
+        name: "No Preview Packages in Production"
+        severity: medium
+        description: "Should not use preview/rc packages in production"
+        check_type: csproj_not_contains
+        pattern: "Version=\".*(-preview|-rc|-beta|-alpha)"
+        fail_message: "Contains preview/pre-release package versions"
+
+      - id: PKG-004
+        name: "Modern Logging Package"
+        severity: medium
+        description: "Should use Microsoft.Extensions.Logging or Serilog"
+        check_type: csproj_contains
+        pattern: "Microsoft.Extensions.Logging|Serilog"
+        fail_message: "No modern logging package detected"
+
+  - name: "Code Patterns"
+    rules:
+      - id: CODE-001
+        name: "Minimal API Usage"
+        severity: medium
+        description: "Web APIs should use minimal API pattern"
+        check_type: cs_pattern
+        pattern: "app\\.Map(Get|Post|Put|Delete)"
+        fail_message: "Not using minimal API patterns"
+
+      - id: CODE-002
+        name: "Async/Await Pattern"
+        severity: high
+        description: "I/O operations should use async/await"
+        check_type: cs_pattern
+        pattern: "async Task|async ValueTask"
+        fail_message: "Limited async/await usage detected"
+
+      - id: CODE-003
+        name: "Span and Memory Usage"
+        severity: low
+        description: "Consider using Span<T>/Memory<T> for performance"
+        check_type: cs_pattern
+        pattern: "Span<|Memory<|ReadOnlySpan<"
+        fail_message: "No Span/Memory usage detected"
+
+      - id: CODE-004
+        name: "Record Types for DTOs"
+        severity: low
+        description: "Consider using record types for data transfer objects"
+        check_type: cs_pattern
+        pattern: "record (class |struct )?\\w+"
+        fail_message: "No record type usage detected"
+
+  - name: "DevOps & CI/CD"
+    rules:
+      - id: DEVOPS-001
+        name: "Dockerfile Present"
+        severity: high
+        description: "Repository should have a Dockerfile for containerization"
+        check_type: file_exists
+        pattern: "Dockerfile"
+        fail_message: "No Dockerfile found"
+
+      - id: DEVOPS-002
+        name: "CI Pipeline Defined"
+        severity: high
+        description: "Should have an Azure Pipelines YAML or GitHub Actions workflow"
+        check_type: file_exists
+        pattern: "azure-pipelines.yml|.github/workflows"
+        fail_message: "No CI/CD pipeline definition found"
+
+      - id: DEVOPS-003
+        name: "Health Check Endpoint"
+        severity: medium
+        description: "Web apps should have a /health endpoint"
+        check_type: cs_pattern
+        pattern: "MapHealthChecks|/health|HealthCheck"
+        fail_message: "No health check endpoint detected"
+
+      - id: DEVOPS-004
+        name: "Docker Multi-Stage Build"
+        severity: medium
+        description: "Dockerfile should use multi-stage builds"
+        check_type: file_contains
+        file: "Dockerfile"
+        pattern: "FROM.*AS"
+        fail_message: "Dockerfile does not use multi-stage builds"
+
+  - name: "Performance & AOT"
+    rules:
+      - id: PERF-001
+        name: "Native AOT Ready"
+        severity: medium
+        description: "Project should be configured for Native AOT publishing"
+        check_type: csproj_contains
+        pattern: "<PublishAot>true</PublishAot>"
+        fail_message: "Not configured for Native AOT publishing"
+
+      - id: PERF-002
+        name: "Trimming Enabled"
+        severity: medium
+        description: "Assembly trimming should be enabled for deployment"
+        check_type: csproj_contains
+        pattern: "<PublishTrimmed>true</PublishTrimmed>"
+        fail_message: "Assembly trimming not enabled"
+
+      - id: PERF-003
+        name: "Source Generators Used"
+        severity: low
+        description: "Consider using source generators for serialization"
+        check_type: cs_pattern
+        pattern: "\\[JsonSerializable|\\[JsonSourceGenerationOptions"
+        fail_message: "No source generator usage for JSON serialization"
+
+      - id: PERF-004
+        name: "Response Caching"
+        severity: low
+        description: "API responses should implement caching"
+        check_type: cs_pattern
+        pattern: "ResponseCache|OutputCache|AddOutputCache"
+        fail_message: "No response caching configured"

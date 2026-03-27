@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
+from app.config import get_settings
 from app.models.enums import ExportFormat
 from app.services.cache import CacheManager
 
@@ -16,12 +17,18 @@ router = APIRouter()
 
 @router.get("/export")
 async def export_report(
-    organization: str = Query(..., description="ADO organization name"),
+    organization: str = Query("", description="ADO organization name (uses default if empty)"),
     format: ExportFormat = Query(ExportFormat.JSON, description="Export format"),
 ):
     """Export compliance report as JSON or CSV."""
+    settings = get_settings()
+    org = organization or settings.ado_organization
+
+    if not org:
+        raise HTTPException(status_code=400, detail="Organization name is required")
+
     cache = CacheManager()
-    data = cache.load(organization)
+    data = cache.load(org)
 
     if data is None:
         raise HTTPException(status_code=404, detail="No scan data to export")
@@ -61,7 +68,8 @@ async def export_report(
         ])
 
         # Data rows
-        for result in data.scan_results:
+        results = data.repositories or data.scan_results
+        for result in results:
             cat_scores = {cs.category: cs.score for cs in result.category_scores}
             writer.writerow([
                 result.repository.name,

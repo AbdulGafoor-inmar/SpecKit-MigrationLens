@@ -1,6 +1,14 @@
 # MigrationLens Compliance Rules
-# .NET 10 / C# 14 Modernization Standards
-# Each rule: id, name, category, severity, description, check_type, expected
+# .NET 10 / C# 14 Modernization Standards + Finance Wiki Standards
+# Each rule includes migration_guide + suggested_fix for step-by-step reporting
+# wiki_source indicates the rule was derived from a wiki page standard
+#
+# applies_to: controls which application types a rule applies to.
+#   "all"     — applies to every repo (default if omitted)
+#   "api"     — only applies to API / web service repos
+#   "cronjob" — only applies to CronJob / scheduled-task repos
+#   "worker"  — only applies to background worker repos
+# Multiple types can be listed: [api, worker]
 
 categories:
   - name: "SDK & Runtime"
@@ -12,6 +20,8 @@ categories:
         check_type: csproj_contains
         pattern: "<TargetFramework>net10.0</TargetFramework>"
         fail_message: "Project does not target net10.0"
+        migration_guide: "Update <TargetFramework> in .csproj to net10.0. Run 'dotnet restore' afterwards. Check https://learn.microsoft.com/dotnet/core/compatibility for breaking changes."
+        suggested_fix: "<TargetFramework>net10.0</TargetFramework>"
 
       - id: SDK-002
         name: "Global.json SDK Version"
@@ -20,6 +30,8 @@ categories:
         check_type: file_exists
         pattern: "global.json"
         fail_message: "No global.json found to pin SDK version"
+        migration_guide: "Create global.json in repo root: run 'dotnet new globaljson --sdk-version 10.0.100'. This pins the SDK for all developers and CI."
+        suggested_fix: '{ "sdk": { "version": "10.0.100", "rollForward": "latestFeature" } }'
 
       - id: SDK-003
         name: "Runtime Identifier Specified"
@@ -28,6 +40,8 @@ categories:
         check_type: csproj_contains
         pattern: "<RuntimeIdentifier"
         fail_message: "No RuntimeIdentifier specified in project file"
+        migration_guide: "Add <RuntimeIdentifier>linux-x64</RuntimeIdentifier> (or win-x64, linux-arm64) inside <PropertyGroup> in .csproj for predictable deployment builds."
+        suggested_fix: "<RuntimeIdentifier>linux-x64</RuntimeIdentifier>"
 
       - id: SDK-004
         name: "No Deprecated Target Frameworks"
@@ -36,6 +50,8 @@ categories:
         check_type: csproj_not_contains
         pattern: "net5.0|netcoreapp3.1|netcoreapp2.1|net48|net472|net461"
         fail_message: "Project targets a deprecated/EOL framework"
+        migration_guide: "Remove deprecated TFMs. Replace <TargetFramework> value with net10.0. Update NuGet packages for compatibility. Remove #if preprocessor directives for removed frameworks."
+        suggested_fix: "<TargetFramework>net10.0</TargetFramework>"
 
   - name: "Language Features"
     rules:
@@ -46,6 +62,8 @@ categories:
         check_type: csproj_contains
         pattern: "<LangVersion>14</LangVersion>|<LangVersion>latest</LangVersion>|<LangVersion>preview</LangVersion>"
         fail_message: "LangVersion not set to 14 or latest"
+        migration_guide: "Add <LangVersion>14</LangVersion> in .csproj <PropertyGroup>. C# 14 enables extension members, first-class Span, field keyword, and more."
+        suggested_fix: "<LangVersion>14</LangVersion>"
 
       - id: LANG-002
         name: "File-Scoped Namespaces"
@@ -54,6 +72,8 @@ categories:
         check_type: cs_pattern
         pattern: "^namespace .+;$"
         fail_message: "Not using file-scoped namespaces"
+        migration_guide: "Convert 'namespace X { ... }' to 'namespace X;' (C# 10+). Removes one indentation level. Use IDE Quick Actions (Ctrl+.) to convert automatically."
+        suggested_fix: "namespace MyApp.Services;"
 
       - id: LANG-003
         name: "Primary Constructors Usage"
@@ -62,6 +82,8 @@ categories:
         check_type: cs_pattern
         pattern: "class \\w+\\("
         fail_message: "No primary constructor usage detected"
+        migration_guide: "Use primary constructors (C# 12+): 'public class OrderService(ILogger logger)' instead of separate constructor + field. Best for DI services."
+        suggested_fix: "public class MyService(ILogger<MyService> logger, IRepository repo)"
 
       - id: LANG-004
         name: "Collection Expressions"
@@ -70,6 +92,8 @@ categories:
         check_type: cs_pattern
         pattern: "\\[.*\\]"
         fail_message: "No collection expression syntax detected"
+        migration_guide: "Use collection expressions (C# 12+): 'List<int> items = [1, 2, 3];' instead of 'new List<int> { 1, 2, 3 }'. Spread: '[..first, ..second]'."
+        suggested_fix: "List<int> items = [1, 2, 3];"
 
   - name: "Project Configuration"
     rules:
@@ -80,6 +104,8 @@ categories:
         check_type: csproj_contains
         pattern: "<Nullable>enable</Nullable>"
         fail_message: "Nullable reference types not enabled"
+        migration_guide: "Add <Nullable>enable</Nullable> in .csproj. Fix CS8600/CS8602/CS8603 warnings. Add '?' to nullable parameters. Use null-forgiving '!' operator where safe."
+        suggested_fix: "<Nullable>enable</Nullable>"
 
       - id: CFG-002
         name: "Implicit Usings Enabled"
@@ -88,6 +114,8 @@ categories:
         check_type: csproj_contains
         pattern: "<ImplicitUsings>enable</ImplicitUsings>"
         fail_message: "ImplicitUsings not enabled"
+        migration_guide: "Add <ImplicitUsings>enable</ImplicitUsings> in .csproj. Remove now-implicit usings (System, System.Linq, etc.). Add custom global usings in GlobalUsings.cs."
+        suggested_fix: "<ImplicitUsings>enable</ImplicitUsings>"
 
       - id: CFG-003
         name: "Central Package Management"
@@ -96,6 +124,8 @@ categories:
         check_type: file_exists
         pattern: "Directory.Packages.props"
         fail_message: "No Directory.Packages.props found"
+        migration_guide: "Create Directory.Packages.props at solution root with <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>. Move all Version= attributes from .csproj PackageReference to central file."
+        suggested_fix: '<PackageVersion Include="PackageName" Version="x.y.z" />'
 
       - id: CFG-004
         name: "Treat Warnings as Errors"
@@ -104,6 +134,8 @@ categories:
         check_type: csproj_contains
         pattern: "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>"
         fail_message: "TreatWarningsAsErrors not enabled"
+        migration_guide: "Add <TreatWarningsAsErrors>true</TreatWarningsAsErrors> in .csproj. Fix all existing warnings first. Suppress specific warnings with <NoWarn>CS1591</NoWarn> if needed."
+        suggested_fix: "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>"
 
       - id: CFG-005
         name: "EditorConfig Present"
@@ -112,6 +144,8 @@ categories:
         check_type: file_exists
         pattern: ".editorconfig"
         fail_message: "No .editorconfig file found"
+        migration_guide: "Create .editorconfig in repo root with indent, charset, naming rules. Add csharp_style_namespace_declarations=file_scoped. Run 'dotnet format' to auto-fix."
+        suggested_fix: "root = true\n[*.cs]\nindent_style = space\nindent_size = 4"
 
   - name: "NuGet & Dependencies"
     rules:
@@ -122,6 +156,8 @@ categories:
         check_type: csproj_not_contains
         pattern: "Microsoft.AspNetCore.Mvc.NewtonsoftJson|Newtonsoft.Json"
         fail_message: "References deprecated package (prefer System.Text.Json)"
+        migration_guide: "Migrate from Newtonsoft.Json to System.Text.Json. Replace JsonConvert with JsonSerializer. Replace [JsonProperty] with [JsonPropertyName]. Use source generators for AOT."
+        suggested_fix: "using System.Text.Json; JsonSerializer.Serialize(obj);"
 
       - id: PKG-002
         name: "Package Versions Specified"
@@ -130,6 +166,8 @@ categories:
         check_type: csproj_contains
         pattern: "PackageReference Include"
         fail_message: "Missing or incomplete PackageReference definitions"
+        migration_guide: "Ensure all <PackageReference> have Version attributes. Run 'dotnet list package' to audit. Use 'dotnet outdated' to find newer versions."
+        suggested_fix: '<PackageReference Include="PackageName" Version="x.y.z" />'
 
       - id: PKG-003
         name: "No Preview Packages in Production"
@@ -138,6 +176,8 @@ categories:
         check_type: csproj_not_contains
         pattern: "Version=\".*(-preview|-rc|-beta|-alpha)"
         fail_message: "Contains preview/pre-release package versions"
+        migration_guide: "Replace preview packages with stable versions. Run 'dotnet list package --include-prerelease'. Update to latest stable or document the risk."
+        suggested_fix: '<PackageReference Include="PackageName" Version="x.y.z" />'
 
       - id: PKG-004
         name: "Modern Logging Package"
@@ -146,16 +186,54 @@ categories:
         check_type: csproj_contains
         pattern: "Microsoft.Extensions.Logging|Serilog"
         fail_message: "No modern logging package detected"
+        migration_guide: "Add structured logging. Option A: Microsoft.Extensions.Logging with ILogger<T>. Option B: Serilog.AspNetCore with builder.Host.UseSerilog(). Use semantic logging templates."
+        suggested_fix: '<PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />'
+
+      - id: PKG-005
+        name: "Serilog Standard Packages"
+        severity: medium
+        description: "Should use the Finance team standard Serilog package set"
+        check_type: csproj_contains
+        pattern: "Serilog.Extensions.Logging.ApplicationInsights|Serilog.Sinks.ApplicationInsights"
+        fail_message: "Missing Finance team standard Serilog + Application Insights packages"
+        wiki_source: "Logging standards using Serilog"
+        migration_guide: "Install the standard Serilog package set: Serilog, Serilog.Extensions.Hosting, Serilog.Extensions.Logging, Serilog.Extensions.Logging.ApplicationInsights, Serilog.Sinks.ApplicationInsights, Serilog.Sinks.ColoredConsole, Serilog.Enrichers.CallerInfo, Microsoft.ApplicationInsights.WorkerService."
+        suggested_fix: '<PackageReference Include="Serilog.Extensions.Logging.ApplicationInsights" Version="8.0.0" />\n<PackageReference Include="Serilog.Sinks.ApplicationInsights" Version="4.0.0" />\n<PackageReference Include="Serilog.Enrichers.CallerInfo" Version="3.0.0" />'
+
+      - id: PKG-006
+        name: "Polly Resilience Library"
+        severity: medium
+        description: "HTTP calls should use Polly for retry/circuit-breaker logic"
+        check_type: csproj_contains
+        pattern: "Polly"
+        fail_message: "No Polly resilience library detected. Use Polly retry only for safe idempotent calls (GET, SELECT)"
+        wiki_source: "Polly Integration - Retry framework"
+        migration_guide: "Add Polly for transient fault handling. Install Polly, Polly.Extensions.Http, Polly.Contrib.WaitAndRetry. Use with HttpClientFactory: builder.Services.AddHttpClient('name').AddPolicyHandler(retryPolicy). Only retry safe operations (GET/SELECT), never retry mutations (PUT/DELETE/INSERT)."
+        suggested_fix: "builder.Services.AddHttpClient(\"financeClient\")\n  .SetHandlerLifetime(TimeSpan.FromMinutes(5))\n  .AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(Backoff.DecorrelatedJitterBackoffV2(TimeSpan.FromSeconds(1), 5)));"
+
+      - id: PKG-007
+        name: "EFCore Bulk Extensions"
+        severity: low
+        description: "Use EFCore.BulkExtensions for bulk database operations"
+        check_type: csproj_contains
+        pattern: "EFCore.BulkExtensions"
+        fail_message: "No EFCore.BulkExtensions detected. Recommended for BulkInsert/BulkUpdate performance"
+        wiki_source: "Entity Framework Bulk Operations"
+        migration_guide: "Install EFCore.BulkExtensions NuGet package for high-performance bulk operations. Replace loop-based Insert/Update with BulkInsert/BulkUpdate/BulkDelete. Significantly improves performance for large data sets."
+        suggested_fix: '<PackageReference Include="EFCore.BulkExtensions" Version="8.1.0" />\nawait context.BulkInsertAsync(entities);'
 
   - name: "Code Patterns"
     rules:
       - id: CODE-001
         name: "Minimal API Usage"
         severity: medium
+        applies_to: [api]
         description: "Web APIs should use minimal API pattern"
         check_type: cs_pattern
         pattern: "app\\.Map(Get|Post|Put|Delete)"
         fail_message: "Not using minimal API patterns"
+        migration_guide: "Migrate controllers to minimal APIs: app.MapGet(\"/api/users\", (IService svc) => svc.GetAll()). Group with MapGroup(\"/api/users\"). Add .WithTags() for Swagger."
+        suggested_fix: 'app.MapGet("/api/endpoint", (IService svc) => svc.GetAll());'
 
       - id: CODE-002
         name: "Async/Await Pattern"
@@ -164,6 +242,8 @@ categories:
         check_type: cs_pattern
         pattern: "async Task|async ValueTask"
         fail_message: "Limited async/await usage detected"
+        migration_guide: "Convert sync I/O to async. Use 'async Task<T>' return types. Avoid .Result/.Wait() (deadlocks). Add CancellationToken parameters. Use ValueTask for hot paths."
+        suggested_fix: "public async Task<IEnumerable<T>> GetAllAsync(CancellationToken ct = default)"
 
       - id: CODE-003
         name: "Span and Memory Usage"
@@ -172,6 +252,8 @@ categories:
         check_type: cs_pattern
         pattern: "Span<|Memory<|ReadOnlySpan<"
         fail_message: "No Span/Memory usage detected"
+        migration_guide: "Use Span<T>/ReadOnlySpan<char> for zero-allocation parsing. Replace Substring() with AsSpan(). C# 14 adds first-class Span support in more contexts."
+        suggested_fix: "ReadOnlySpan<char> span = text.AsSpan();"
 
       - id: CODE-004
         name: "Record Types for DTOs"
@@ -180,6 +262,91 @@ categories:
         check_type: cs_pattern
         pattern: "record (class |struct )?\\w+"
         fail_message: "No record type usage detected"
+        migration_guide: "Use record types for DTOs: 'public record UserDto(string Name, string Email);'. Provides value equality, immutability, with-expressions. Use 'record struct' for small stack types."
+        suggested_fix: "public record UserDto(string Name, string Email);"
+
+      - id: CODE-005
+        name: "Exception Middleware"
+        severity: high
+        applies_to: [api]
+        description: "Web APIs should use exception handling middleware"
+        check_type: cs_pattern
+        pattern: "UseExceptionHandler|ExceptionMiddleware|LoggingMiddleware|app\\.UseMiddleware"
+        fail_message: "No exception handling middleware detected. Avoid try-catch in every controller — use centralized middleware"
+        wiki_source: "Coding Standards"
+        migration_guide: "Add centralized exception middleware instead of try-catch in every method. Create an ExceptionMiddleware class that catches unhandled exceptions, logs them with Serilog, and returns standardized error responses. Register with app.UseMiddleware<ExceptionMiddleware>()."
+        suggested_fix: "app.UseMiddleware<LoggingMiddleware>();\napp.UseMiddleware<ExceptionMiddleware>();"
+
+      - id: CODE-006
+        name: "API Versioning"
+        severity: medium
+        applies_to: [api]
+        description: "APIs should use versioning (header-based per Finance standard)"
+        check_type: cs_pattern
+        pattern: "AddApiVersioning|ApiVersion|HeaderApiVersionReader"
+        fail_message: "No API versioning detected. Finance standard: use header-based api-version"
+        wiki_source: "HealthCheck Standard"
+        migration_guide: "Add API versioning: builder.Services.AddApiVersioning(config => { config.DefaultApiVersion = new ApiVersion(1, 0); config.AssumeDefaultVersionWhenUnspecified = true; config.ReportApiVersions = true; config.ApiVersionReader = new HeaderApiVersionReader('api-version'); });"
+        suggested_fix: "builder.Services.AddApiVersioning(config =>\n{\n    config.DefaultApiVersion = new ApiVersion(1, 0);\n    config.AssumeDefaultVersionWhenUnspecified = true;\n    config.ApiVersionReader = new HeaderApiVersionReader(\"api-version\");\n});"
+
+      - id: CODE-007
+        name: "Swagger Documentation"
+        severity: low
+        applies_to: [api]
+        description: "APIs should have Swagger/OpenAPI documentation with descriptions"
+        check_type: cs_pattern
+        pattern: "AddSwaggerGen|SwaggerDoc|AddEndpointsApiExplorer"
+        fail_message: "No Swagger/OpenAPI documentation configured"
+        wiki_source: "Swagger Description Templates for API Endpoints"
+        migration_guide: "Add Swagger: builder.Services.AddEndpointsApiExplorer(); builder.Services.AddSwaggerGen(). Use [SwaggerOperation] attributes with Summary and Description per the Finance template. Add [ProducesResponseType] for each status code."
+        suggested_fix: "builder.Services.AddEndpointsApiExplorer();\nbuilder.Services.AddSwaggerGen(c =>\n{\n    c.SwaggerDoc(\"v1\", new OpenApiInfo { Title = \"API\", Version = \"v1\" });\n});"
+
+      - id: CODE-008
+        name: "Integration Tests Present"
+        severity: medium
+        description: "Repository should have integration tests following Finance team standards"
+        check_type: cs_pattern
+        pattern: "IntegrationTest|IClassFixture|WebApplicationFactory"
+        fail_message: "No integration tests detected. Follow Arrange/Act/Assert pattern with IClassFixture"
+        wiki_source: "Integration Testing Best Practices"
+        migration_guide: "Create integration tests using xUnit with IClassFixture<TestSetup>. Follow Arrange/Act/Assert pattern. Name tests as <ClassUnderTest>IntegrationTests with descriptive [DisplayName]. Keep setup in a dedicated Utils/TestSetup class. Test critical business workflows and cross-layer flows."
+        suggested_fix: "public class PayeeGroupIntegrationTests : IClassFixture<TestSetup>\n{\n    [Fact]\n    [DisplayName(\"Should create payee group successfully\")]\n    public async Task CreatePayeeGroup_ValidInput_ReturnsSuccess() { }\n}"
+
+      - id: CODE-009
+        name: "CronJob Idempotency"
+        severity: high
+        applies_to: [cronjob]
+        description: "CronJobs must be idempotent — safe to re-run without side effects"
+        check_type: cs_pattern
+        pattern: "idempoten|upsert|MERGE|INSERT.*ON CONFLICT|INSERT.*IGNORE|AddOrUpdate|CreateOrUpdate"
+        fail_message: "No idempotency pattern detected. CronJobs must be safe to re-run"
+        wiki_source: "CronJob best practices"
+        migration_guide: "Ensure CronJob logic is idempotent. Use UPSERT/MERGE instead of INSERT. Check for existing records before processing. Use database transactions with proper isolation. Avoid sending duplicate notifications — track what's been sent."
+        suggested_fix: "await context.BulkInsertOrUpdateAsync(records, new BulkConfig { PropertiesToExclude = new List<string> { \"CreatedDate\" } });"
+
+      - id: CODE-010
+        name: "CronJob Execution Logging"
+        severity: high
+        applies_to: [cronjob]
+        description: "CronJobs must log start, end, and record count for each run"
+        check_type: cs_pattern
+        pattern: "LogInformation.*start|LogInformation.*complet|LogInformation.*finish|LogInformation.*processed|_logger\\.Log"
+        fail_message: "CronJob does not log execution lifecycle (start/end/count)"
+        wiki_source: "CronJob best practices"
+        migration_guide: "Add structured logging to CronJob: log start time, records processed, duration, and completion status. Example: _logger.LogInformation(\"Job {JobName} started at {StartTime}\"); ... _logger.LogInformation(\"Job {JobName} completed. Processed {Count} records in {Duration}ms\");"
+        suggested_fix: "_logger.LogInformation(\"CronJob {JobName} started at {StartTime}\", nameof(MyJob), DateTime.UtcNow);\n// ... process ...\n_logger.LogInformation(\"CronJob {JobName} completed. Processed {Count} records in {Duration}ms\", nameof(MyJob), count, sw.ElapsedMilliseconds);"
+
+      - id: CODE-011
+        name: "CronJob Error Handling"
+        severity: critical
+        applies_to: [cronjob]
+        description: "CronJobs must have try-catch with proper error logging — failures are silent otherwise"
+        check_type: cs_pattern
+        pattern: "catch.*Exception|LogError|LogCritical"
+        fail_message: "No error handling detected. CronJob failures are silent without proper catch + logging"
+        wiki_source: "CronJob best practices"
+        migration_guide: "Wrap the entire CronJob execution in try-catch. Log errors with full exception details. Optionally send alerts for critical failures. Example: catch (Exception ex) { _logger.LogError(ex, \"CronJob {JobName} failed\"); throw; }"
+        suggested_fix: "try\n{\n    await ExecuteJobAsync(cancellationToken);\n}\ncatch (Exception ex)\n{\n    _logger.LogError(ex, \"CronJob {JobName} failed after processing {Count} records\", nameof(MyJob), processedCount);\n    throw;\n}"
 
   - name: "DevOps & CI/CD"
     rules:
@@ -190,6 +357,8 @@ categories:
         check_type: file_exists
         pattern: "Dockerfile"
         fail_message: "No Dockerfile found"
+        migration_guide: "Create a Dockerfile using mcr.microsoft.com/dotnet/sdk:10.0 (build) and aspnet:10.0 (runtime). Use multi-stage builds. Add .dockerignore for bin/obj/.git."
+        suggested_fix: "FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build\nWORKDIR /src\nCOPY . .\nRUN dotnet publish -c Release -o /app\nFROM mcr.microsoft.com/dotnet/aspnet:10.0\nCOPY --from=build /app .\nENTRYPOINT [\"dotnet\", \"MyApp.dll\"]"
 
       - id: DEVOPS-002
         name: "CI Pipeline Defined"
@@ -198,14 +367,19 @@ categories:
         check_type: file_exists
         pattern: "azure-pipelines.yml|.github/workflows"
         fail_message: "No CI/CD pipeline definition found"
+        migration_guide: "Create azure-pipelines.yml in repo root. Use UseDotNet@2 task with version 10.0.x. Add steps for restore, build, test, publish. Include code coverage."
+        suggested_fix: "trigger:\n  - main\npool:\n  vmImage: ubuntu-latest\nsteps:\n  - task: UseDotNet@2\n    inputs: { version: 10.0.x }\n  - script: dotnet build -c Release\n  - script: dotnet test -c Release"
 
       - id: DEVOPS-003
         name: "Health Check Endpoint"
         severity: medium
-        description: "Web apps should have a /health endpoint"
+        applies_to: [api]
+        description: "Web APIs should have a /health endpoint"
         check_type: cs_pattern
         pattern: "MapHealthChecks|/health|HealthCheck"
         fail_message: "No health check endpoint detected"
+        migration_guide: "Add health checks: builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>(); app.MapHealthChecks(\"/health\");. Add liveness/readiness for K8s."
+        suggested_fix: "builder.Services.AddHealthChecks();\napp.MapHealthChecks(\"/health\");"
 
       - id: DEVOPS-004
         name: "Docker Multi-Stage Build"
@@ -215,6 +389,203 @@ categories:
         file: "Dockerfile"
         pattern: "FROM.*AS"
         fail_message: "Dockerfile does not use multi-stage builds"
+        migration_guide: "Convert Dockerfile to multi-stage: Stage 1 (sdk image) for build/publish, Stage 2 (aspnet image) for runtime. Reduces image size by ~500MB."
+        suggested_fix: "FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build\n...\nFROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime\nCOPY --from=build /app ."
+
+      - id: DEVOPS-005
+        name: "Docker Alpine Base Image"
+        severity: high
+        description: "Dockerfile should use Alpine-based images (smallest possible)"
+        check_type: file_contains
+        file: "Dockerfile"
+        pattern: "alpine|chiseled"
+        fail_message: "Not using Alpine or chiseled base images. Finance standard: use smallest possible image"
+        wiki_source: "Docker best practices and sample Dockerfiles"
+        migration_guide: "Switch Docker base images to Alpine variants. Build: financeteamdev.azurecr.io/dotnet/sdk/custom:10.0-alpine (or mcr.microsoft.com/dotnet/sdk:10.0-alpine). Runtime: financeteamdev.azurecr.io/dotnet/aspnet/custom:10.0-alpine. For .NET 10, prefer chiseled images: mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled for smallest attack surface (~100MB vs ~220MB)."
+        suggested_fix: "# Build stage\nFROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build-env\n# Runtime stage — chiseled for minimal attack surface\nFROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime"
+
+      - id: DEVOPS-006
+        name: "Docker Non-Root User"
+        severity: high
+        description: "Container must run as non-root user on port 8080"
+        check_type: file_contains
+        file: "Dockerfile"
+        pattern: "USER app|USER 1654|runAsNonRoot|8080"
+        fail_message: "Container not configured for non-root execution. Finance standard: USER app on port 8080"
+        wiki_source: "Custom dotnet base images (sdk, runtime, aspnet)"
+        migration_guide: "Configure container for non-root execution. Add 'USER app' in Dockerfile. Set ASPNETCORE_URLS=http://*:8080 and EXPOSE 8080 (non-root cannot bind <1024). Add required Alpine packages: apk add icu-libs krb5-libs libgcc libintl libssl3 libstdc++ zlib. Set DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false."
+        suggested_fix: "ENV ASPNETCORE_URLS=http://*:8080\nEXPOSE 8080\nUSER app\nWORKDIR /home/app"
+
+      - id: DEVOPS-007
+        name: "Docker Chiseled Image"
+        severity: high
+        description: "Use .NET chiseled/distroless images for minimal attack surface"
+        check_type: file_contains
+        file: "Dockerfile"
+        pattern: "chiseled|distroless"
+        fail_message: "Not using chiseled images. .NET 10 chiseled images are ~100MB with zero shell/package manager"
+        migration_guide: "Upgrade to .NET chiseled images for production. Chiseled images strip the OS to bare minimum — no shell, no package manager, no root user. Use mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled for ASP.NET or mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled for console apps. ~100MB vs ~220MB regular Alpine. Already runs as non-root. Pair with PublishTrimmed + PublishAot for smallest possible image (<30MB)."
+        suggested_fix: "# Chiseled runtime — minimal attack surface, non-root by default\nFROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime\nWORKDIR /app\nCOPY --from=build /app/publish .\nENTRYPOINT [\"dotnet\", \"MyApp.dll\"]"
+
+      - id: DEVOPS-008
+        name: "Docker ACR Cache Usage"
+        severity: medium
+        description: "Dockerfile should pull from ACR cache instead of MCR directly"
+        check_type: file_contains
+        file: "Dockerfile"
+        pattern: "financeteamdev.azurecr.io"
+        fail_message: "Not using Finance ACR cache for base images. Use financeteamdev.azurecr.io for faster builds"
+        wiki_source: "Use the ACR cache"
+        migration_guide: "Switch FROM statements to use Finance ACR cache for faster, more reliable builds. Replace mcr.microsoft.com/dotnet/sdk with financeteamdev.azurecr.io/dotnet/sdk. Replace mcr.microsoft.com/dotnet/aspnet with financeteamdev.azurecr.io/dotnet/aspnet. Use custom images from financeteamdev.azurecr.io/dotnet/sdk/custom when Azure Artifacts token is needed."
+        suggested_fix: "FROM financeteamdev.azurecr.io/dotnet/sdk/custom:10.0-alpine AS build-env\nFROM financeteamdev.azurecr.io/dotnet/aspnet/custom:10.0-alpine AS run-env"
+
+  - name: "AKS & Kubernetes"
+    rules:
+      - id: AKS-001
+        name: "K8s Deployment YAML Present"
+        severity: high
+        description: "Repository should have Kubernetes deployment manifests"
+        check_type: file_exists
+        pattern: "deployment.yaml|api-deployment.yaml|cronjob.yaml"
+        fail_message: "No Kubernetes deployment YAML found. Migrate to new AKS cluster format"
+        wiki_source: "Migration process to New AKS cluster"
+        migration_guide: "Create k8s/ folder with deployment manifests. For APIs: api-deployment.yaml, api-service.yaml, api-ingress.yaml. For CronJobs: cronjob.yaml. Include bootstrap/ folder with deploy-api.sh or deploy-cronjob.sh, bootstrap.sh, and AddAnnotationOnAppInsights.sh."
+        suggested_fix: "# k8s/api-deployment.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: $APP_DEPLOYMENT_NAME\n  namespace: $K8_NAMESPACE"
+
+      - id: AKS-002
+        name: "K8s Security Context (Non-Root)"
+        severity: critical
+        description: "Pods must run as non-root with security context per new AKS standard"
+        check_type: file_contains
+        file: "deployment.yaml"
+        pattern: "runAsNonRoot|runAsUser|securityContext"
+        fail_message: "Missing Kubernetes security context. New AKS requires: runAsNonRoot: true, runAsUser: 1654, seccompProfile"
+        wiki_source: "Migration process to New AKS cluster"
+        migration_guide: "Add pod-level securityContext to deployment YAML:\n  securityContext:\n    runAsUser: 1654\n    runAsGroup: 1654\n    runAsNonRoot: true\n    seccompProfile:\n      type: RuntimeDefault\nAdd container-level securityContext:\n    securityContext:\n      allowPrivilegeEscalation: false\n      readOnlyRootFilesystem: true\nMount /tmp as emptyDir volume for writable temp space."
+        suggested_fix: "spec:\n  securityContext:\n    runAsUser: 1654\n    runAsGroup: 1654\n    runAsNonRoot: true\n    seccompProfile:\n      type: \"RuntimeDefault\"\n  containers:\n    - securityContext:\n        allowPrivilegeEscalation: false\n        readOnlyRootFilesystem: true"
+
+      - id: AKS-003
+        name: "K8s Workload Identity"
+        severity: high
+        description: "Pods should use Azure Workload Identity instead of service account tokens"
+        check_type: file_contains
+        file: "deployment.yaml"
+        pattern: "workload.identity|workload-sa"
+        fail_message: "Not using Azure Workload Identity. New AKS standard requires workload-sa service account"
+        wiki_source: "Migration process to New AKS cluster"
+        migration_guide: "Add workload identity to deployment YAML template:\n  labels:\n    azure.workload.identity/use: \"true\"\n  spec:\n    automountServiceAccountToken: false\n    serviceAccountName: \"workload-sa\"\nThis replaces the old service principal approach. Use kubelogin for authentication in deploy scripts."
+        suggested_fix: "template:\n  metadata:\n    labels:\n      azure.workload.identity/use: \"true\"\n  spec:\n    automountServiceAccountToken: false\n    serviceAccountName: \"workload-sa\""
+
+      - id: AKS-004
+        name: "K8s Resource Limits"
+        severity: medium
+        description: "Containers must have CPU and memory resource requests and limits"
+        check_type: file_contains
+        file: "deployment.yaml"
+        pattern: "resources:|requests:|limits:"
+        fail_message: "No resource requests/limits in deployment manifest"
+        wiki_source: "Kubernetes Best practices - New AKS"
+        migration_guide: "Add resource requests and limits to every container spec. Standard API limits: requests cpu=25m memory=100Mi, limits cpu=200m memory=512Mi. CronJob limits: requests cpu=25m memory=50Mi, limits cpu=200m memory=500Mi. Use containerPort: 8080 (not 80 — non-root)."
+        suggested_fix: "resources:\n  requests:\n    cpu: 25m\n    memory: 100Mi\n  limits:\n    cpu: 200m\n    memory: 512Mi\nports:\n  - containerPort: 8080"
+
+      - id: AKS-005
+        name: "K8s Deployment Annotations"
+        severity: medium
+        description: "Deployments should include build/release metadata annotations"
+        check_type: file_contains
+        file: "deployment.yaml"
+        pattern: "BUILD_BUILDNUMBER|RELEASE_RELEASENAME|annotations"
+        fail_message: "Missing build/release annotations on K8s deployment"
+        wiki_source: "Kubernetes Best practices - New AKS"
+        migration_guide: "Add metadata annotations to deployment YAML for traceability:\n  annotations:\n    BUILD_BUILDID, BUILD_BUILDNUMBER, BUILD_SOURCEBRANCHNAME, BUILD_REPOSITORY_NAME\n    RELEASE_RELEASENAME, RELEASE_ATTEMPTNUMBER, RELEASE_DEPLOYMENT_REQUESTEDFOR, RELEASE_DEPLOYMENT_STARTTIME, RELEASE_RELEASEWEBURL\nInject BUILD_BUILDNUMBER and RELEASE_RELEASENAME as env vars into pods for Application Insights log labels."
+        suggested_fix: "metadata:\n  annotations:\n    BUILD_BUILDNUMBER: \"$BUILD_BUILDNUMBER\"\n    RELEASE_RELEASENAME: \"$RELEASE_RELEASENAME\""
+
+      - id: AKS-006
+        name: "Bootstrap Deploy Scripts"
+        severity: medium
+        description: "Repository should have bootstrap folder with deploy scripts for new AKS"
+        check_type: file_exists
+        pattern: "bootstrap|deploy-api.sh|deploy-cronjob.sh|swapIngress.sh"
+        fail_message: "No bootstrap deploy scripts found. New AKS cluster uses bootstrap.sh with kubelogin"
+        wiki_source: "Migration process to New AKS cluster"
+        migration_guide: "Create bootstrap/ folder with deployment scripts:\n  - bootstrap.sh: Main entry point called from release pipeline\n  - deploy-api.sh (API) or deploy-cronjob.sh (CronJob): Gets AKS credentials, uses kubelogin, applies YAML\n  - swapIngress.sh (API only): Blue/green ingress swap\n  - scaleDownOldDeployment.sh (API only): Scale down old slot\n  - AddAnnotationOnAppInsights.sh: App Insights deployment annotation\nReplace hardcoded cluster names with variables: AKS_CLUSTER_NAME, AKS_RESOURCE_GROUP_NAME, AKS_SUBSCRIPTION_ID."
+        suggested_fix: "#!/bin/bash\naz aks get-credentials --name $AKS_CLUSTER_NAME --resource-group $AKS_RESOURCE_GROUP_NAME --overwrite-existing --subscription $AKS_SUBSCRIPTION_ID\nkubelogin convert-kubeconfig -l azurecli"
+
+      - id: AKS-007
+        name: "CronJob YAML Manifest"
+        severity: high
+        applies_to: [cronjob]
+        description: "CronJob repos must have a cronjob.yaml manifest with schedule"
+        check_type: file_contains
+        file: "cronjob.yaml"
+        pattern: "kind:\\s*CronJob|schedule:"
+        fail_message: "No CronJob YAML manifest found or missing kind: CronJob / schedule field"
+        wiki_source: "Migration process to New AKS cluster"
+        migration_guide: "Create k8s/cronjob.yaml with proper K8s CronJob spec. Include schedule, concurrencyPolicy, successfulJobsHistoryLimit, failedJobsHistoryLimit. Use bootstrap/deploy-cronjob.sh for deployment."
+        suggested_fix: "apiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: $APP_DEPLOYMENT_NAME\n  namespace: $K8_NAMESPACE\nspec:\n  schedule: \"0 */6 * * *\"\n  concurrencyPolicy: Forbid\n  successfulJobsHistoryLimit: 3\n  failedJobsHistoryLimit: 3"
+
+      - id: AKS-008
+        name: "CronJob Concurrency Policy"
+        severity: high
+        applies_to: [cronjob]
+        description: "CronJobs must set concurrencyPolicy to Forbid to prevent overlapping runs"
+        check_type: file_contains
+        file: "cronjob.yaml"
+        pattern: "concurrencyPolicy:\\s*(Forbid|Replace)"
+        fail_message: "CronJob missing concurrencyPolicy: Forbid. Overlapping runs can cause data corruption"
+        wiki_source: "CronJob best practices"
+        migration_guide: "Set concurrencyPolicy: Forbid in cronjob.yaml. This prevents a new job from starting if the previous one is still running. Use 'Replace' only if the new run should kill the old one. Never use 'Allow' in production."
+        suggested_fix: "spec:\n  concurrencyPolicy: Forbid\n  successfulJobsHistoryLimit: 3\n  failedJobsHistoryLimit: 3"
+
+      - id: AKS-009
+        name: "CronJob Restart Policy"
+        severity: medium
+        applies_to: [cronjob]
+        description: "CronJob pods must use restartPolicy: Never or OnFailure"
+        check_type: file_contains
+        file: "cronjob.yaml"
+        pattern: "restartPolicy:\\s*(Never|OnFailure)"
+        fail_message: "CronJob missing restartPolicy. Must be Never or OnFailure (not Always)"
+        wiki_source: "CronJob best practices"
+        migration_guide: "Set restartPolicy: Never (or OnFailure) in the pod template spec. K8s CronJobs do not support restartPolicy: Always. 'Never' is preferred so failed jobs don't restart endlessly; instead the CronJob controller creates a new pod."
+        suggested_fix: "spec:\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          restartPolicy: Never"
+
+      - id: AKS-010
+        name: "CronJob History Limits"
+        severity: low
+        applies_to: [cronjob]
+        description: "CronJob should set history limits to prevent resource buildup"
+        check_type: file_contains
+        file: "cronjob.yaml"
+        pattern: "successfulJobsHistoryLimit|failedJobsHistoryLimit"
+        fail_message: "CronJob missing history limits. Old completed pods accumulate without limits"
+        wiki_source: "CronJob best practices"
+        migration_guide: "Set successfulJobsHistoryLimit and failedJobsHistoryLimit in cronjob.yaml. Recommended: successfulJobsHistoryLimit: 3, failedJobsHistoryLimit: 3. This prevents old completed/failed pods from accumulating in the namespace."
+        suggested_fix: "spec:\n  successfulJobsHistoryLimit: 3\n  failedJobsHistoryLimit: 3"
+
+      - id: AKS-011
+        name: "API Ingress Configuration"
+        severity: high
+        applies_to: [api]
+        description: "API repos must have an ingress YAML for external traffic routing"
+        check_type: file_exists
+        pattern: "ingress.yaml|api-ingress.yaml"
+        fail_message: "No Kubernetes Ingress manifest found. APIs need ingress for external routing"
+        wiki_source: "Migration process to New AKS cluster"
+        migration_guide: "Create k8s/api-ingress.yaml with nginx ingress class. Include proper host, path, TLS, and annotations. Use blue/green slots with swapIngress.sh for zero-downtime deployments."
+        suggested_fix: "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: $APP_DEPLOYMENT_NAME-ingress\n  annotations:\n    nginx.ingress.kubernetes.io/rewrite-target: /\nspec:\n  ingressClassName: nginx\n  rules:\n    - host: $APP_HOST\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend:\n              service:\n                name: $APP_DEPLOYMENT_NAME\n                port:\n                  number: 8080"
+
+      - id: AKS-012
+        name: "API Service YAML"
+        severity: high
+        applies_to: [api]
+        description: "API repos must have a service YAML for internal cluster networking"
+        check_type: file_exists
+        pattern: "service.yaml|api-service.yaml"
+        fail_message: "No Kubernetes Service manifest found. APIs need a Service for cluster networking"
+        wiki_source: "Migration process to New AKS cluster"
+        migration_guide: "Create k8s/api-service.yaml with ClusterIP type. Map port 8080 to the container. This is required for ingress to route traffic to the pods."
+        suggested_fix: "apiVersion: v1\nkind: Service\nmetadata:\n  name: $APP_DEPLOYMENT_NAME\n  namespace: $K8_NAMESPACE\nspec:\n  type: ClusterIP\n  ports:\n    - port: 8080\n      targetPort: 8080\n  selector:\n    app: $APP_DEPLOYMENT_NAME"
 
   - name: "Performance & AOT"
     rules:
@@ -225,6 +596,8 @@ categories:
         check_type: csproj_contains
         pattern: "<PublishAot>true</PublishAot>"
         fail_message: "Not configured for Native AOT publishing"
+        migration_guide: "Add <PublishAot>true</PublishAot> in .csproj. Ensure no runtime reflection. Use source generators for serialization. Test with 'dotnet publish -r linux-x64'. .NET 10 improves AOT significantly."
+        suggested_fix: "<PublishAot>true</PublishAot>"
 
       - id: PERF-002
         name: "Trimming Enabled"
@@ -233,6 +606,8 @@ categories:
         check_type: csproj_contains
         pattern: "<PublishTrimmed>true</PublishTrimmed>"
         fail_message: "Assembly trimming not enabled"
+        migration_guide: "Add <PublishTrimmed>true</PublishTrimmed> in .csproj. Fix trimming warnings with [DynamicallyAccessedMembers]. Test thoroughly. Use <TrimMode>link</TrimMode> for aggressive trimming."
+        suggested_fix: "<PublishTrimmed>true</PublishTrimmed>"
 
       - id: PERF-003
         name: "Source Generators Used"
@@ -241,11 +616,16 @@ categories:
         check_type: cs_pattern
         pattern: "\\[JsonSerializable|\\[JsonSourceGenerationOptions"
         fail_message: "No source generator usage for JSON serialization"
+        migration_guide: "Create a JsonSerializerContext with [JsonSerializable(typeof(MyDto))] for AOT-safe serialization. Register via ConfigureHttpJsonOptions in ASP.NET."
+        suggested_fix: "[JsonSerializable(typeof(MyDto))]\ninternal partial class AppJsonContext : JsonSerializerContext { }"
 
       - id: PERF-004
         name: "Response Caching"
         severity: low
+        applies_to: [api]
         description: "API responses should implement caching"
         check_type: cs_pattern
         pattern: "ResponseCache|OutputCache|AddOutputCache"
         fail_message: "No response caching configured"
+        migration_guide: "Add output caching (.NET 7+): builder.Services.AddOutputCache(); app.UseOutputCache(); app.MapGet(...).CacheOutput();. Use cache tags for invalidation."
+        suggested_fix: "builder.Services.AddOutputCache();\napp.UseOutputCache();\napp.MapGet(\"/api/data\", () => data).CacheOutput();"
