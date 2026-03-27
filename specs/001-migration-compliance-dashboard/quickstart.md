@@ -1,6 +1,7 @@
 # Quickstart & Integration Tests
 
 **Feature**: 001-migration-compliance-dashboard
+**Updated**: 2026-03-27
 
 ## Prerequisites
 
@@ -8,17 +9,34 @@
 - Node.js 18+
 - Docker & Docker Compose (optional)
 - Azure DevOps PAT with **Code (Read)** and **Work Items (Read & Write)** scope
+- Azure OpenAI endpoint (optional — system falls back to rule-based analysis)
 
 ## Environment Variables
 
 ```bash
+# Required — Azure DevOps
 ADO_PAT=<your-personal-access-token>
 ADO_ORGANIZATION=<your-org-name>
 ADO_PROJECT=<optional-project-filter>
+
+# Optional — Azure OpenAI
+AZURE_OPENAI_ENDPOINT=<your-endpoint>
+AZURE_OPENAI_API_KEY=<your-key>
+AZURE_OPENAI_DEPLOYMENT=gpt-35-turbo
+AZURE_OPENAI_API_VERSION=2025-01-01-preview
+
+# Optional — Cache
+CACHE_DIR=.cache
+CACHE_TTL=86400
+
+# Optional — Server
+BACKEND_URL=http://localhost:8000
+CORS_ORIGINS=http://localhost:3000
 ```
 
 **PAT Scope Requirements**:
-- **Code (Read)** — repository scanning
+- **Code (Read)** — repository scanning, file content
+- **Code (Write)** — auto-fix branch/push/PR creation
 - **Work Items (Read & Write)** — work item creation, boards, WIQL queries
 - **Wiki (Read)** — wiki page browsing
 
@@ -46,7 +64,7 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
-npm run dev
+NEXT_PUBLIC_API_URL=http://localhost:8000/api npm run dev
 # Open http://localhost:3000
 ```
 
@@ -60,152 +78,144 @@ Expected: 200, body contains { "status": "healthy" }
 
 ### Scenario 2: Dashboard with No Scan Data
 ```
-GET /api/dashboard?organization=test-org
+GET /api/dashboard
 Expected: 404, body contains "No scan data found"
 ```
 
-### Scenario 3: Trigger Scan
+### Scenario 3: List Repositories
+```
+GET /api/repos
+Expected: 200, body is array of ADO repositories (or empty array)
+```
+
+### Scenario 4: Trigger Scan
 ```
 POST /api/scan
-Body: { "organization": "test-org" }
+Body: { "organization": "my-org" }
 Expected: 202, body contains { "message": "Scan started" }
 ```
 
-### Scenario 4: Check Scan Progress
+### Scenario 5: Check Scan Progress
 ```
 GET /api/scan/progress
-Expected: 200, body contains is_scanning boolean, percentage float
+Expected: 200, body contains is_scanning boolean, progress float
 ```
 
-### Scenario 5: Duplicate Scan Prevention
+### Scenario 6: Duplicate Scan Prevention
 ```
 POST /api/scan (while scan is running)
 Expected: 409, body contains "already in progress"
 ```
 
-### Scenario 6: Get Dashboard After Scan
+### Scenario 7: Stop Scan
 ```
-GET /api/dashboard?organization=test-org
-Expected: 200, body has total_repos > 0, scan_results array
+POST /api/scan/stop
+Expected: 200, body contains "stop requested"
 ```
 
-### Scenario 7: Repo Detail
+### Scenario 8: Get Dashboard After Scan
+```
+GET /api/dashboard
+Expected: 200, body has total_repositories > 0, repositories array
+```
+
+### Scenario 9: Repo Detail
 ```
 GET /api/repos/{repo_id}
 Expected: 200, body has compliance_results array, category_scores array
 ```
 
-### Scenario 8: Create Work Item
+### Scenario 10: Migration Report
+```
+GET /api/repos/{repo_id}/migration-report
+Expected: 200, body has steps array, total_steps, severity counts, wiki_standards
+```
+
+### Scenario 11: Create Work Item
 ```
 POST /api/workitems
-Body: { "repo_name": "MyService", "compliance_score": 75, "failing_rules": [...], "priority": 2 }
+Body: { "repo_id": "abc", "repo_name": "MyService", "failing_rules": [...], "overall_score": 75, "priority": 2, "organization": "my-org" }
 Expected: 201, body has work_item_id, url, title
 ```
 
-### Scenario 9: Export JSON
+### Scenario 12: Export JSON
 ```
-GET /api/export?organization=test-org&format=json
+GET /api/export?format=json
 Expected: 200, Content-Type: application/json, Content-Disposition header
 ```
 
-### Scenario 10: Export CSV
+### Scenario 13: Export CSV
 ```
-GET /api/export?organization=test-org&format=csv
+GET /api/export?format=csv
 Expected: 200, Content-Type: text/csv, Content-Disposition header
 ```
 
-### Scenario 11: Invalid Organization
+### Scenario 14: Get Settings
 ```
-POST /api/scan
-Body: { "organization": "" }
-Expected: 422, validation error
+GET /api/settings
+Expected: 200, body has ado_organization, has_pat boolean
 ```
 
-### Scenario 12: Cache Behavior
+### Scenario 15: AI Analysis
+```
+GET /api/repos/{repo_id}/ai-analysis
+Expected: 200, body has code_analysis, risk_assessment, migration_plan, ai_available
+```
+
+### Scenario 16: AI Health Check
+```
+GET /api/ai/health
+Expected: 200, body has status ("healthy" or "unavailable")
+```
+
+### Scenario 17: List Pull Requests
+```
+GET /api/repos/{repo_id}/pull-requests?status=active
+Expected: 200, body is array of PullRequestInfo objects
+```
+
+### Scenario 18: Run PR Review
+```
+GET /api/repos/{repo_id}/pull-requests/{pr_id}/review
+Expected: 200, body has verdict, confidence_score, confidence_breakdown
+```
+
+### Scenario 19: Post PR Comment
+```
+POST /api/repos/{repo_id}/pull-requests/{pr_id}/comment
+Body: { ...PRReviewResult }
+Expected: 200, body has message, thread_id
+```
+
+### Scenario 20: Start Auto-Fix (SSE)
+```
+POST /api/autofix/{repo_id}
+Body: { "organization": "my-org" }
+Expected: 200, Content-Type: text/event-stream, SSE events with step progress
+```
+
+### Scenario 21: Cache Behavior
 ```
 1. GET /api/dashboard → 200
 2. Wait < cache TTL
-3. GET /api/dashboard → 200 (same scan_timestamp, served from cache)
+3. GET /api/dashboard → 200 (same data, served from cache)
 ```
 
-### Scenario 13: List Wikis
+### Scenario 22: Repo Not Found
 ```
-GET /api/wiki?project=Platform
-Expected: 200, body is array of WikiInfo objects with id, name, type
-```
-
-### Scenario 14: Get Wiki Page
-```
-GET /api/wiki/{wiki_id}/page?path=/Home&project=Platform
-Expected: 200, body has path, content (Markdown string), sub_pages array
-```
-
-### Scenario 15: List Wiki Pages (Tree)
-```
-GET /api/wiki/{wiki_id}/pages?project=Platform
-Expected: 200, body has wiki_id, wiki_name, pages array (may contain nested sub_pages)
-```
-
-### Scenario 16: Wiki with Invalid Wiki ID
-```
-GET /api/wiki/nonexistent/page?path=/Home
-Expected: 200, body has empty content or null (graceful handling)
-```
-
-### Scenario 17: List Boards
-```
-GET /api/boards?project=Platform
-Expected: 200, body is array of BoardInfo objects with id, name, url
-```
-
-### Scenario 18: Board Detail with Columns
-```
-GET /api/boards/Stories?project=Platform
-Expected: 200, body has board_name, columns array (with state_mappings), work_items array
-```
-
-### Scenario 19: Custom WIQL Query
-```
-POST /api/boards/query
-Body: { "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'User Story'", "project": "Platform", "top": 50 }
-Expected: 200, body has count int, work_items array of WorkItemInfo
-```
-
-### Scenario 20: List Work Items with Filters
-```
-GET /api/boards/workitems/list?project=Platform&work_item_type=Bug&state=Active&top=100
-Expected: 200, body has count, work_items filtered by type and state
-```
-
-### Scenario 21: Board Detail with Team
-```
-GET /api/boards/Stories?project=Platform&team=Alpha
-Expected: 200, team-scoped board detail
-```
-
-### Scenario 22: WIQL with Invalid Query
-```
-POST /api/boards/query
-Body: { "wiql": "", "project": "Platform" }
-Expected: 200 with empty work_items (graceful), or 500 with ADO error details
+GET /api/repos/nonexistent
+Expected: 404
 ```
 
 ## Smoke Test Script
 
 ```bash
-# Run after docker compose up
+# Run after starting backend
 curl -s http://localhost:8000/api/health | jq .
+curl -s http://localhost:8000/api/settings | jq .
+curl -s http://localhost:8000/api/ai/health | jq .
 curl -s -X POST http://localhost:8000/api/scan -H "Content-Type: application/json" -d '{"organization":"my-org"}' | jq .
 sleep 30
-curl -s http://localhost:8000/api/dashboard?organization=my-org | jq .total_repos
-curl -s http://localhost:8000/api/export?organization=my-org&format=csv -o report.csv
-
-# Wiki endpoints
-curl -s http://localhost:8000/api/wiki | jq .
-curl -s "http://localhost:8000/api/wiki/WIKI_ID/pages" | jq .pages
-
-# Boards endpoints
-curl -s http://localhost:8000/api/boards | jq .
-curl -s http://localhost:8000/api/boards/Stories | jq .columns
-curl -s "http://localhost:8000/api/boards/workitems/list?work_item_type=User+Story&top=10" | jq .count
+curl -s http://localhost:8000/api/scan/progress | jq .
+curl -s http://localhost:8000/api/dashboard | jq .total_repositories
 ```

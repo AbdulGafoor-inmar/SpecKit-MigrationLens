@@ -1,7 +1,10 @@
-# API Contracts: Dashboard Endpoints
+# API Contracts: MigrationLens Endpoints
 
 **Feature**: 001-migration-compliance-dashboard
+**Updated**: 2026-03-27
 **Base URL**: `http://localhost:8000/api`
+
+**Note**: All endpoints are under `/api` prefix. Wiki and Boards endpoints are currently disabled (commented out in `main.py`).
 
 ---
 
@@ -9,12 +12,12 @@
 
 Health check endpoint.
 
-**Response 200**:
+**Response 200** (`HealthResponse`):
 ```json
 {
   "status": "healthy",
   "version": "1.0.0",
-  "timestamp": "2026-03-12T10:00:00Z"
+  "timestamp": "2026-03-27T10:00:00Z"
 }
 ```
 
@@ -22,27 +25,25 @@ Health check endpoint.
 
 ## GET /api/dashboard
 
-Returns the aggregated dashboard summary. Uses cached data if available.
+Returns the aggregated dashboard summary from cache.
 
 **Query Parameters**:
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| organization | string | yes | — | ADO organization name |
-| project | string | no | — | Filter to a specific project |
+| organization | string | no | env default | ADO organization name |
+| project | string | no | env default | Filter to a specific project |
 
 **Response 200** (`DashboardSummary`):
 ```json
 {
-  "total_repos": 42,
+  "organization": "my-org",
+  "project": "Platform",
+  "total_repositories": 42,
+  "scanned_repositories": 42,
   "average_score": 73.5,
-  "fully_compliant": 12,
-  "needs_migration": 18,
-  "version_distribution": {
-    "net8.0": 20,
-    "net6.0": 15,
-    "net10.0": 7
-  },
-  "scan_results": [
+  "passing_repositories": 12,
+  "failing_repositories": 18,
+  "repositories": [
     {
       "repository": {
         "id": "abc-123",
@@ -51,70 +52,74 @@ Returns the aggregated dashboard summary. Uses cached data if available.
         "default_branch": "main",
         "project": "Platform",
         "dotnet_version": "net8.0",
-        "last_commit_date": "2026-03-10T14:30:00Z"
+        "app_type": "api"
       },
       "compliance_results": [],
       "category_scores": [
         {
           "category": "SDK & Runtime",
           "score": 80.0,
-          "total_rules": 5,
-          "passed": 4,
+          "total_rules": 4,
+          "passed": 3,
           "failed": 1,
           "not_applicable": 0
         }
       ],
       "overall_score": 75.0,
-      "scan_timestamp": "2026-03-12T09:00:00Z",
-      "project_count": 3,
-      "complexity": "moderate"
+      "compliance_status": "Needs Migration",
+      "dotnet_version": "net8.0",
+      "csharp_version": "",
+      "complexity": "moderate",
+      "project_count": 3
     }
   ],
-  "last_scan_time": "2026-03-12T09:00:00Z"
+  "category_averages": {
+    "SDK & Runtime": 80.0,
+    "Language Features": 65.0
+  }
 }
 ```
 
-**Response 404**: No scan data available yet.
+**Response 404**: No scan data available.
 ```json
-{
-  "detail": "No scan data found. Trigger a scan first."
-}
+{ "detail": "No scan data found. Trigger a scan first." }
 ```
 
 ---
 
 ## POST /api/scan
 
-Triggers a compliance scan of repositories. Returns immediately; use /api/scan/progress to track.
+Triggers a compliance scan of repositories. Runs as a background task.
 
-**Request Body**:
+**Request Body** (`ScanRequest`):
 ```json
 {
   "organization": "my-org",
   "project": "Platform",
-  "pat_token": "optional-override-token"
+  "pat_token": "optional-override-token",
+  "repo_ids": ["repo-id-1", "repo-id-2"]
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| organization | string | yes | ADO organization |
-| project | string | no | Filter to specific project |
-| pat_token | string | no | Override PAT (default from env) |
-
-**Response 202**:
+**Response 202** (`ScanStartResponse`):
 ```json
-{
-  "message": "Scan started",
-  "total_repos": 42
-}
+{ "message": "Scan started", "total_repos": 42 }
 ```
 
 **Response 409**: Scan already in progress.
 ```json
-{
-  "detail": "A scan is already in progress"
-}
+{ "detail": "A scan is already in progress" }
+```
+
+---
+
+## POST /api/scan/stop
+
+Stops or resets an in-progress scan.
+
+**Response 200**:
+```json
+{ "message": "Scan stop requested" }
 ```
 
 ---
@@ -126,73 +131,133 @@ Returns current scan progress.
 **Response 200** (`ScanProgress`):
 ```json
 {
-  "total": 42,
-  "completed": 15,
+  "total_repos": 42,
+  "scanned_repos": 15,
   "current_repo": "MyService",
-  "percentage": 35.7,
+  "progress": 35.7,
   "is_scanning": true,
-  "started_at": "2026-03-12T09:00:00Z"
+  "message": "Scanning MyService..."
 }
+```
+
+---
+
+## GET /api/repos
+
+Lists repositories from Azure DevOps (with optional in-memory caching).
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| organization | string | no | env default | ADO organization |
+| project | string | no | env default | ADO project |
+
+**Response 200**: Array of `ADORepository` objects.
+```json
+[
+  {
+    "id": "abc-123",
+    "name": "MyService",
+    "project": "Platform",
+    "default_branch": "main",
+    "url": "https://dev.azure.com/org/project/_git/MyService"
+  }
+]
 ```
 
 ---
 
 ## GET /api/repos/{repo_id}
 
-Returns detailed compliance results for a single repository.
+Returns detailed scan results for a single repository.
 
 **Path Parameters**:
 | Param | Type | Description |
 |-------|------|-------------|
 | repo_id | string | Repository ID |
 
-**Response 200** (`RepoScanResult`):
-```json
-{
-  "repository": { "..." : "..." },
-  "compliance_results": [
-    {
-      "rule_id": "SDK-001",
-      "rule_name": "Target Framework is .NET 10",
-      "category": "SDK & Runtime",
-      "status": "fail",
-      "severity": "critical",
-      "details": "Project targets net8.0, expected net10.0",
-      "file_path": "src/MyService/MyService.csproj"
-    }
-  ],
-  "category_scores": [],
-  "overall_score": 75.0,
-  "scan_timestamp": "2026-03-12T09:00:00Z",
-  "project_count": 3,
-  "complexity": "moderate"
-}
-```
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| organization | string | no | env default | ADO organization |
+
+**Response 200** (`RepoScanResult`): Full scan result with compliance_results, category_scores, overall_score.
 
 **Response 404**: Repository not found in scan data.
 
 ---
 
+## GET /api/repos/{repo_id}/migration-report
+
+Returns a detailed migration report with step-by-step guidance and wiki standards.
+
+**Path Parameters**:
+| Param | Type | Description |
+|-------|------|-------------|
+| repo_id | string | Repository ID |
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| organization | string | no | env default | ADO organization |
+| project | string | no | env default | ADO project |
+
+**Response 200** (`MigrationReport`):
+```json
+{
+  "repository": { "id": "abc-123", "name": "MyService", "..." : "..." },
+  "steps": [
+    {
+      "step_number": 1,
+      "rule_id": "SDK-001",
+      "rule_name": "Target Framework is .NET 10",
+      "category": "SDK & Runtime",
+      "severity": "critical",
+      "status": "fail",
+      "file_path": "src/MyService/MyService.csproj",
+      "line_number": 4,
+      "current_code": "<TargetFramework>net8.0</TargetFramework>",
+      "suggested_fix": "<TargetFramework>net10.0</TargetFramework>",
+      "description": "Project must target .NET 10",
+      "migration_guide": "Update TargetFramework in .csproj",
+      "wiki_reference": "",
+      "wiki_source": ""
+    }
+  ],
+  "total_steps": 15,
+  "critical_steps": 3,
+  "high_steps": 5,
+  "medium_steps": 4,
+  "low_steps": 3,
+  "passing_rules": 40,
+  "failing_rules": 15,
+  "overall_score": 72.7,
+  "dotnet_version_current": "net8.0",
+  "dotnet_version_target": "net10.0",
+  "wiki_standards": [],
+  "categories_summary": {}
+}
+```
+
+**Response 404**: Repository not found.
+
+---
+
 ## POST /api/workitems
 
-Creates an Azure DevOps work item (User Story) for migration tasks.
+Creates an Azure DevOps work item (User Story) for migration. Includes deduplication.
 
 **Request Body** (`CreateStoryRequest`):
 ```json
 {
+  "repo_id": "abc-123",
   "repo_name": "MyService",
-  "compliance_score": 75.0,
   "failing_rules": [
-    {
-      "rule_id": "SDK-001",
-      "rule_name": "Target Framework is .NET 10",
-      "category": "SDK & Runtime",
-      "status": "fail",
-      "severity": "critical",
-      "details": "Project targets net8.0, expected net10.0"
-    }
+    { "rule_id": "SDK-001", "rule_name": "Target Framework is .NET 10", "category": "SDK & Runtime", "status": "fail", "severity": "critical" }
   ],
-  "priority": 2
+  "overall_score": 75.0,
+  "priority": 2,
+  "organization": "my-org"
 }
 ```
 
@@ -205,284 +270,267 @@ Creates an Azure DevOps work item (User Story) for migration tasks.
 }
 ```
 
-**Response 400**: Invalid request body.
-**Response 502**: ADO API failure.
-
 ---
 
 ## GET /api/export
 
-Exports compliance report in specified format.
+Exports compliance report as JSON or CSV download.
 
 **Query Parameters**:
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| organization | string | yes | — | ADO organization |
+| organization | string | no | env default | ADO organization |
 | format | string | no | "json" | Export format: "json" or "csv" |
 
-**Response 200**: File download.
-- `Content-Type: application/json` or `text/csv`
-- `Content-Disposition: attachment; filename="migration-report-{date}.{ext}"`
+**Response 200**: File download with `Content-Disposition` header.
 
 **Response 404**: No scan data to export.
 
 ---
 
-## GET /api/wiki
+## GET /api/settings
 
-Lists all wikis (project and code wikis) in the configured Azure DevOps project.
+Returns non-sensitive application settings.
 
-**Query Parameters**:
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| project | string | no | "" | ADO project name (uses env default if empty) |
-
-**Response 200** (`list[WikiInfo]`):
-```json
-[
-  {
-    "id": "wiki-guid-123",
-    "name": "Platform.wiki",
-    "type": "projectWiki",
-    "url": "https://dev.azure.com/org/project/_apis/wiki/wikis/wiki-guid-123",
-    "project_id": "proj-guid",
-    "repository_id": "repo-guid"
-  }
-]
-```
-
----
-
-## GET /api/wiki/{wiki_id}/page
-
-Returns a single wiki page with its Markdown content.
-
-**Path Parameters**:
-| Param | Type | Description |
-|-------|------|-------------|
-| wiki_id | string | Wiki identifier |
-
-**Query Parameters**:
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| path | string | no | "/" | Wiki page path (e.g., "/Architecture/Overview") |
-| project | string | no | "" | ADO project name |
-
-**Response 200** (`WikiPage`):
+**Response 200** (`AppSettings`):
 ```json
 {
-  "id": 42,
-  "path": "/Architecture/Overview",
-  "content": "# Architecture Overview\n\nThis document describes...",
-  "git_item_path": "/Architecture/Overview.md",
-  "sub_pages": [],
-  "remote_url": "https://dev.azure.com/org/project/_wiki/wikis/wiki-guid/42/Overview",
-  "order": 0
+  "ado_organization": "my-org",
+  "ado_project": "Platform",
+  "ado_base_url": "https://dev.azure.com/my-org",
+  "has_pat": true,
+  "backend_url": "http://localhost:8000",
+  "cors_origins": "http://localhost:3000",
+  "cache_dir": ".cache",
+  "cache_ttl": 86400
 }
 ```
 
 ---
 
-## GET /api/wiki/{wiki_id}/pages
+## GET /api/repos/{repo_id}/ai-analysis
 
-Lists all wiki pages in a tree structure for a given wiki.
+Runs AI code analysis, risk assessment, and migration plan generation in parallel.
 
 **Path Parameters**:
 | Param | Type | Description |
 |-------|------|-------------|
-| wiki_id | string | Wiki identifier |
+| repo_id | string | Repository ID |
 
 **Query Parameters**:
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| path | string | no | "/" | Root path to list from |
-| project | string | no | "" | ADO project name |
+| organization | string | no | env default | ADO organization |
 
-**Response 200** (`WikiPageListResponse`):
+**Response 200** (`AIAnalysisResponse`):
 ```json
 {
-  "wiki_id": "wiki-guid-123",
-  "wiki_name": "Platform.wiki",
-  "pages": [
-    {
-      "id": 1,
-      "path": "/Home",
-      "content": "",
-      "git_item_path": "/Home.md",
-      "sub_pages": [
-        {
-          "id": 2,
-          "path": "/Home/Getting-Started",
-          "content": "",
-          "git_item_path": "/Home/Getting-Started.md",
-          "sub_pages": [],
-          "remote_url": "",
-          "order": 0
-        }
-      ],
-      "remote_url": "",
-      "order": 0
-    }
-  ]
+  "code_analysis": {
+    "summary": "Repository uses .NET 8 with several modernization opportunities",
+    "insights": [
+      { "title": "Outdated Framework", "description": "...", "severity": "high", "category": "SDK & Runtime" }
+    ],
+    "recommendations": [
+      { "priority": 1, "action": "Update target framework", "effort": "low", "impact": "high" }
+    ]
+  },
+  "risk_assessment": {
+    "risk_level": "medium",
+    "risk_score": 45.0,
+    "effort_estimate_days": 5,
+    "risk_factors": [],
+    "mitigation_suggestions": [],
+    "confidence": 0.8
+  },
+  "migration_plan": {
+    "phases": [],
+    "estimated_total_hours": 40,
+    "pr_suggestions": [],
+    "breaking_changes": []
+  },
+  "ai_available": true
 }
 ```
 
 ---
 
-## GET /api/boards
+## GET /api/ai/health
+
+Check Azure OpenAI connectivity.
+
+**Response 200**:
+```json
+{ "status": "healthy", "model": "gpt-35-turbo" }
+```
+
+**Response 200** (unavailable):
+```json
+{ "status": "unavailable", "detail": "Azure OpenAI not configured" }
+```
+
+---
+
+## GET /api/repos/{repo_id}/pull-requests
+
+Lists pull requests for a repository.
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| status | string | no | "active" | PR status filter (active, completed, all) |
+| project | string | no | env default | ADO project |
+
+**Response 200**: Array of `PullRequestInfo` objects.
+
+---
+
+## GET /api/repos/{repo_id}/pull-requests/{pr_id}/review
+
+Runs AI PR review (fetches diff + linked work items, sends to Azure OpenAI).
+
+**Response 200** (`PRReviewResult`):
+```json
+{
+  "pr": { "pr_id": 123, "title": "...", "..." : "..." },
+  "linked_work_items": [],
+  "story_match": "Strong match",
+  "acceptance_criteria": [],
+  "code_quality_issues": [],
+  "business_logic_issues": [],
+  "standards_violations": [],
+  "risks": [],
+  "completeness": { "has_tests": false, "has_docs": false, "..." : "..." },
+  "suggestions": [],
+  "verdict": "NEEDS_CHANGES",
+  "confidence_score": 72.0,
+  "confidence_breakdown": [
+    { "category": "Story Alignment", "weight": 20, "score": 18, "deductions": [] }
+  ],
+  "summary": "...",
+  "files_changed": []
+}
+```
+
+---
+
+## POST /api/repos/{repo_id}/pull-requests/{pr_id}/comment
+
+Posts an AI review as a PR comment thread in ADO.
+
+**Request Body**: `PRReviewResult` object.
+
+**Response 200**:
+```json
+{ "message": "Review posted successfully", "thread_id": 456 }
+```
+
+---
+
+## POST /api/autofix/{repo_id}
+
+Starts the auto-fix pipeline. Returns an SSE (Server-Sent Events) stream with real-time progress.
+
+**Request Body** (`AutoFixRequest`):
+```json
+{
+  "failing_rules": ["SDK-001", "LANG-001"],
+  "organization": "my-org",
+  "project": "Platform"
+}
+```
+
+**Response 200** (SSE stream): Each event is a JSON `AutoFixStepStatus`:
+```
+data: {"step": 1, "name": "Creating work item", "status": "running", "details": "..."}
+data: {"step": 1, "name": "Creating work item", "status": "completed", "url": "https://..."}
+data: {"step": 2, "name": "Generating AI fixes", "status": "running", "details": "..."}
+...
+data: {"step": 6, "name": "AI PR Review", "status": "completed", "details": "APPROVE (85/100)"}
+```
+
+---
+
+## GET /api/wiki *(DISABLED)*
+
+Lists all wikis in a project.
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| project | string | no | env default | ADO project name |
+
+**Response 200**: Array of `WikiInfo` objects.
+
+---
+
+## GET /api/wiki/{wiki_id}/page *(DISABLED)*
+
+Returns a single wiki page with content.
+
+**Query Parameters**:
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| path | string | no | "/" | Wiki page path |
+| project | string | no | env default | ADO project |
+
+**Response 200** (`WikiPage`): Page with content and sub_pages.
+
+---
+
+## GET /api/wiki/{wiki_id}/pages *(DISABLED)*
+
+Lists all wiki pages in a tree structure.
+
+**Response 200** (`WikiPageListResponse`): Wiki ID, name, and pages array.
+
+---
+
+## GET /api/boards *(DISABLED)*
 
 Lists all boards in a project/team.
 
 **Query Parameters**:
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| project | string | no | "" | ADO project name |
-| team | string | no | "" | Team name (uses default team if empty) |
-
-**Response 200** (`list[BoardInfo]`):
-```json
-[
-  {
-    "id": "board-guid-123",
-    "name": "Stories",
-    "url": "https://dev.azure.com/org/project/_apis/work/boards/Stories"
-  },
-  {
-    "id": "board-guid-456",
-    "name": "Bugs",
-    "url": "https://dev.azure.com/org/project/_apis/work/boards/Bugs"
-  }
-]
-```
-
----
-
-## GET /api/boards/{board_name}
-
-Returns board column configuration and associated work items.
-
-**Path Parameters**:
-| Param | Type | Description |
-|-------|------|-------------|
-| board_name | string | Board name (e.g., "Stories", "Bugs") |
-
-**Query Parameters**:
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| project | string | no | "" | ADO project name |
+| project | string | no | env default | ADO project |
 | team | string | no | "" | Team name |
 
-**Response 200** (`BoardDetailResponse`):
-```json
-{
-  "board_name": "Stories",
-  "columns": [
-    {
-      "id": "col-guid-1",
-      "name": "New",
-      "item_limit": 0,
-      "state_mappings": { "User Story": "New" }
-    },
-    {
-      "id": "col-guid-2",
-      "name": "Active",
-      "item_limit": 5,
-      "state_mappings": { "User Story": "Active" }
-    }
-  ],
-  "work_items": [
-    {
-      "id": 12345,
-      "title": "Migrate MyService to .NET 10",
-      "state": "Active",
-      "work_item_type": "User Story",
-      "assigned_to": "Jane Smith",
-      "priority": 2,
-      "tags": "migration;net10",
-      "created_date": "2026-03-01T10:00:00Z",
-      "changed_date": "2026-03-12T14:30:00Z",
-      "url": "https://dev.azure.com/org/project/_workitems/edit/12345"
-    }
-  ]
-}
-```
+**Response 200**: Array of `BoardInfo` objects.
 
 ---
 
-## POST /api/boards/query
+## GET /api/boards/{board_name} *(DISABLED)*
 
-Executes a custom WIQL (Work Item Query Language) query.
+Returns board columns and associated work items.
+
+**Response 200** (`BoardDetailResponse`): Board name, columns, and work items.
+
+---
+
+## POST /api/boards/query *(DISABLED)*
+
+Executes a custom WIQL query.
 
 **Request Body** (`WorkItemQueryRequest`):
 ```json
-{
-  "wiql": "SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.WorkItemType] = 'User Story' AND [System.State] = 'Active'",
-  "project": "Platform",
-  "top": 100
-}
+{ "wiql": "SELECT [System.Id] FROM WorkItems WHERE ...", "project": "Platform", "top": 100 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| wiql | string | yes | WIQL query string |
-| project | string | no | ADO project scope |
-| top | int | no | Max results 1-500 (default: 200) |
-
-**Response 200** (`WorkItemQueryResponse`):
-```json
-{
-  "count": 3,
-  "work_items": [
-    {
-      "id": 12345,
-      "title": "Migrate MyService to .NET 10",
-      "state": "Active",
-      "work_item_type": "User Story",
-      "assigned_to": "Jane Smith",
-      "priority": 2,
-      "tags": "migration",
-      "created_date": "2026-03-01T10:00:00Z",
-      "changed_date": "2026-03-12T14:30:00Z",
-      "url": "https://dev.azure.com/org/project/_workitems/edit/12345"
-    }
-  ]
-}
-```
-
-**Response 422**: Invalid WIQL syntax.
+**Response 200** (`WorkItemQueryResponse`): Count and work_items array.
 
 ---
 
-## GET /api/boards/workitems/list
+## GET /api/boards/workitems/list *(DISABLED)*
 
-Lists work items with optional filters, auto-building a WIQL query from parameters.
+Lists work items with optional filters (auto-builds WIQL).
 
 **Query Parameters**:
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| project | string | no | "" | ADO project name |
-| work_item_type | string | no | "User Story" | Filter by type (User Story, Bug, Task, Epic, Feature) |
-| state | string | no | "" | Filter by state (New, Active, Resolved, Closed) |
-| tags | string | no | "" | Filter by tag (contains match) |
+| project | string | no | env default | ADO project |
+| work_item_type | string | no | "User Story" | Filter by type |
+| state | string | no | "" | Filter by state |
+| tags | string | no | "" | Filter by tag |
 | top | int | no | 200 | Max results 1-500 |
 
-**Response 200** (`WorkItemQueryResponse`):
-```json
-{
-  "count": 15,
-  "work_items": [
-    {
-      "id": 12345,
-      "title": "Migrate MyService to .NET 10",
-      "state": "Active",
-      "work_item_type": "User Story",
-      "assigned_to": "Jane Smith",
-      "priority": 2,
-      "tags": "migration;net10",
-      "created_date": "2026-03-01T10:00:00Z",
-      "changed_date": "2026-03-12T14:30:00Z",
-      "url": "https://dev.azure.com/org/project/_workitems/edit/12345"
-    }
-  ]
-}
-```
+**Response 200** (`WorkItemQueryResponse`): Count and work_items array.
