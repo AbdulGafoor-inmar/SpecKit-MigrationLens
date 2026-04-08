@@ -18,8 +18,12 @@ class Settings(BaseSettings):
     # Azure OpenAI
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
-    azure_openai_deployment: str = "gpt-35-turbo"
+    azure_openai_deployment: str = "gpt-5.4-mini"
     azure_openai_api_version: str = "2025-01-01-preview"
+
+    # Wiki rules source
+    wiki_rules_url: str = "https://dev.azure.com/inmar/Finance/_wiki/wikis/Finance.wiki/46128/Migration-to-new-cluster-and-latest-standards-using-AI-2026"
+    wiki_rules_page_path: str = "/Finance IT/Code and Development Guidelines/Migration to new cluster and latest standards using AI - 2026"
 
     # Cache
     cache_dir: str = ".cache"

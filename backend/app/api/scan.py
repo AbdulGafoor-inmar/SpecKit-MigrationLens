@@ -33,6 +33,7 @@ async def start_scan(request: ScanRequest) -> ScanStartResponse:
             project=project,
             pat_token=request.pat_token,
             repo_ids=request.repo_ids,
+            repo_branches=request.repo_branches,
         )
 
     asyncio.create_task(_run_scan())

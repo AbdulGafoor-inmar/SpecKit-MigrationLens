@@ -89,3 +89,22 @@ async def get_repo_detail(
                         return result
 
     raise HTTPException(status_code=404, detail="Repository not found in scan data")
+
+
+@router.get("/repos/{repo_id}/branches")
+async def list_repo_branches(
+    repo_id: str = Path(..., description="Repository ID"),
+    organization: str = Query("", description="ADO organization name"),
+    project: str = Query("", description="ADO project name"),
+) -> list[dict]:
+    """List all branches for a repository."""
+    settings = get_settings()
+    org = organization or settings.ado_organization
+    proj = project or settings.ado_project
+
+    if not org:
+        raise HTTPException(status_code=400, detail="Organization name is required")
+
+    client = ADOClient(organization=org)
+    branches = await client.list_branches(proj, repo_id)
+    return branches

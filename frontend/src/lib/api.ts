@@ -17,6 +17,7 @@ import type {
   WorkItemQueryResponse,
   AppSettings,
   ADORepository,
+  ADOBranch,
   MigrationReport,
   AIAnalysisResponse,
   PullRequestInfo,
@@ -72,10 +73,16 @@ export async function startScan(
   organization?: string,
   project?: string,
   repoIds?: string[],
+  repoBranches?: Record<string, string>,
 ): Promise<ScanStartResponse> {
   return request<ScanStartResponse>('/scan', {
     method: 'POST',
-    body: JSON.stringify({ organization, project, repo_ids: repoIds ?? [] }),
+    body: JSON.stringify({
+      organization,
+      project,
+      repo_ids: repoIds ?? [],
+      repo_branches: repoBranches ?? {},
+    }),
   });
 }
 
@@ -108,6 +115,19 @@ export async function listRepos(
   if (project) params.set('project', project);
   const qs = params.toString();
   return request<ADORepository[]>(`/repos${qs ? `?${qs}` : ''}`);
+}
+
+/* ── List branches for a repo ── */
+export async function listBranches(
+  repoId: string,
+  organization?: string,
+  project?: string,
+): Promise<ADOBranch[]> {
+  const params = new URLSearchParams();
+  if (organization) params.set('organization', organization);
+  if (project) params.set('project', project);
+  const qs = params.toString();
+  return request<ADOBranch[]>(`/repos/${repoId}/branches${qs ? `?${qs}` : ''}`);
 }
 
 /* ── Work items ── */

@@ -49,6 +49,16 @@ async def export_report(
         output = io.StringIO()
         writer = csv.writer(output)
 
+        # Collect all unique category names across all repos
+        all_categories: list[str] = []
+        results = data.repositories or data.scan_results
+        seen: set[str] = set()
+        for result in results:
+            for cs in result.category_scores:
+                if cs.category not in seen:
+                    all_categories.append(cs.category)
+                    seen.add(cs.category)
+
         # Header row
         writer.writerow([
             "Repository",
@@ -57,18 +67,11 @@ async def export_report(
             "Overall Score",
             "Complexity",
             "Project Count",
-            "SDK & Runtime",
-            "Language Features",
-            "Project Configuration",
-            "NuGet & Dependencies",
-            "Code Patterns",
-            "DevOps & CI/CD",
-            "Performance & AOT",
+            *all_categories,
             "Scan Timestamp",
         ])
 
         # Data rows
-        results = data.repositories or data.scan_results
         for result in results:
             cat_scores = {cs.category: cs.score for cs in result.category_scores}
             writer.writerow([
@@ -78,13 +81,7 @@ async def export_report(
                 result.overall_score,
                 result.complexity,
                 result.project_count,
-                cat_scores.get("SDK & Runtime", "N/A"),
-                cat_scores.get("Language Features", "N/A"),
-                cat_scores.get("Project Configuration", "N/A"),
-                cat_scores.get("NuGet & Dependencies", "N/A"),
-                cat_scores.get("Code Patterns", "N/A"),
-                cat_scores.get("DevOps & CI/CD", "N/A"),
-                cat_scores.get("Performance & AOT", "N/A"),
+                *[cat_scores.get(cat, "N/A") for cat in all_categories],
                 result.scan_timestamp,
             ])
 

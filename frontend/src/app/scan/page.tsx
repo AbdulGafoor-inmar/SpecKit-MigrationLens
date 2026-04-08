@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
-import { startScan, getScanProgress, stopScan } from '@/lib/api';
-import type { ScanProgress } from '@/lib/types';
+import { startScan, getScanProgress, stopScan, listRepos, listBranches } from '@/lib/api';
+import type { ScanProgress, ADORepository, ADOBranch } from '@/lib/types';
 import {
   ScanLine,
   Loader2,
@@ -16,6 +16,9 @@ import {
   GitBranch,
   BarChart3,
   StopCircle,
+  ChevronDown,
+  ChevronUp,
+  Search,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -24,6 +27,72 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /* ── Repo & branch selection state ── */
+  const [repos, setRepos] = useState<ADORepository[]>([]);
+  const [reposLoading, setReposLoading] = useState(true);
+  const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+  const [repoBranches, setRepoBranches] = useState<Record<string, ADOBranch[]>>({});
+  const [selectedBranches, setSelectedBranches] = useState<Record<string, string>>({});
+  const [branchLoading, setBranchLoading] = useState<Record<string, boolean>>({});
+  const [showRepoSelector, setShowRepoSelector] = useState(true);
+  const [repoSearch, setRepoSearch] = useState('');
+
+  /* ── Fetch repos on mount ── */
+  useEffect(() => {
+    listRepos()
+      .then((r) => {
+        setRepos(r);
+        setReposLoading(false);
+      })
+      .catch(() => setReposLoading(false));
+  }, []);
+
+  /* ── Fetch branches for a repo (on-demand) ── */
+  const fetchBranchesFor = useCallback((repoId: string) => {
+    if (repoBranches[repoId] || branchLoading[repoId]) return;
+    setBranchLoading((bl) => ({ ...bl, [repoId]: true }));
+    listBranches(repoId)
+      .then((branches) => {
+        setRepoBranches((rb) => ({ ...rb, [repoId]: branches }));
+        setBranchLoading((bl) => ({ ...bl, [repoId]: false }));
+      })
+      .catch(() => {
+        setBranchLoading((bl) => ({ ...bl, [repoId]: false }));
+      });
+  }, [repoBranches, branchLoading]);
+
+  /* ── Toggle repo selection ── */
+  const toggleRepo = useCallback((repoId: string, defaultBranch: string) => {
+    setSelectedRepos((prev) => {
+      const next = new Set(prev);
+      if (next.has(repoId)) {
+        next.delete(repoId);
+      } else {
+        next.add(repoId);
+        setSelectedBranches((sb) => ({ ...sb, [repoId]: sb[repoId] || defaultBranch }));
+      }
+      return next;
+    });
+  }, []);
+
+  /* ── Select all / none ── */
+  const selectAll = useCallback(() => {
+    const filtered = repos.filter((r) =>
+      r.name.toLowerCase().includes(repoSearch.toLowerCase()),
+    );
+    const allIds = new Set(filtered.map((r) => r.id));
+    setSelectedRepos(allIds);
+    const defaults: Record<string, string> = {};
+    filtered.forEach((r) => {
+      defaults[r.id] = selectedBranches[r.id] || r.default_branch;
+    });
+    setSelectedBranches((sb) => ({ ...sb, ...defaults }));
+  }, [repos, repoSearch, selectedBranches]);
+
+  const selectNone = useCallback(() => {
+    setSelectedRepos(new Set());
+  }, []);
 
   /* ── Poll scan progress ── */
   const fetchProgress = useCallback(async () => {
@@ -61,7 +130,22 @@ export default function ScanPage() {
     setStarting(true);
     setError(null);
     try {
-      await startScan();
+      const repoIds = selectedRepos.size > 0 ? Array.from(selectedRepos) : undefined;
+      // Build branch mapping only for repos with non-default branches
+      const branchMap: Record<string, string> = {};
+      if (repoIds) {
+        for (const id of repoIds) {
+          if (selectedBranches[id]) {
+            branchMap[id] = selectedBranches[id];
+          }
+        }
+      }
+      await startScan(
+        undefined,
+        undefined,
+        repoIds,
+        Object.keys(branchMap).length > 0 ? branchMap : undefined,
+      );
       // Begin polling
       setTimeout(fetchProgress, 500);
     } catch (err: unknown) {
@@ -153,6 +237,196 @@ export default function ScanPage() {
               <span className="text-sm">{error}</span>
             </div>
           )}
+
+          {/* Repository & Branch Selector */}
+          <div className="brand-card overflow-hidden">
+            <button
+              onClick={() => setShowRepoSelector(!showRepoSelector)}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-surface-secondary transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <GitBranch className="h-5 w-5 text-plum" />
+                <div className="text-left">
+                  <h3 className="text-sm font-semibold text-plum-dark">
+                    Select Repositories
+                    {!reposLoading && (
+                      <span className="ml-2 text-xs font-normal text-frost-dark">
+                        {repos.length} found
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-frost-dark">
+                    {selectedRepos.size === 0
+                      ? 'All repositories (default branches)'
+                      : `${selectedRepos.size} repo${selectedRepos.size !== 1 ? 's' : ''} selected`}
+                  </p>
+                </div>
+              </div>
+              {showRepoSelector ? (
+                <ChevronUp className="h-4 w-4 text-frost-dark" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-frost-dark" />
+              )}
+            </button>
+
+            {showRepoSelector && (
+              <div className="border-t border-frost">
+                {/* Search + Select All/None */}
+                <div className="flex items-center gap-3 px-6 py-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-frost-dark" />
+                    <input
+                      type="text"
+                      placeholder="Filter repos..."
+                      value={repoSearch}
+                      onChange={(e) => setRepoSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 rounded-lg border border-frost bg-white text-sm text-plum-dark placeholder:text-frost-dark focus:outline-none focus:ring-2 focus:ring-plum/30"
+                    />
+                  </div>
+                  <button
+                    onClick={selectAll}
+                    className="text-xs font-medium text-plum hover:text-plum-dark transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-frost-dark text-xs">|</span>
+                  <button
+                    onClick={selectNone}
+                    className="text-xs font-medium text-plum hover:text-plum-dark transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {/* Repo table */}
+                {reposLoading ? (
+                  <div className="flex items-center gap-2 py-8 justify-center text-frost-dark">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Loading repositories...</span>
+                  </div>
+                ) : (
+                  <div className="max-h-[420px] overflow-y-auto">
+                    {/* Table header */}
+                    <div className="grid grid-cols-[40px_1fr_120px_200px_40px] gap-2 px-6 py-2 border-b border-frost bg-surface-secondary sticky top-0 z-10">
+                      <div />
+                      <span className="text-[11px] font-semibold text-frost-dark uppercase tracking-wider">Repository</span>
+                      <span className="text-[11px] font-semibold text-frost-dark uppercase tracking-wider">Project</span>
+                      <span className="text-[11px] font-semibold text-frost-dark uppercase tracking-wider">Branch</span>
+                      <span className="text-[11px] font-semibold text-frost-dark uppercase tracking-wider">Link</span>
+                    </div>
+
+                    {/* Table rows */}
+                    {repos
+                      .filter((r) =>
+                        r.name.toLowerCase().includes(repoSearch.toLowerCase()),
+                      )
+                      .map((repo) => {
+                        const isSelected = selectedRepos.has(repo.id);
+                        const branches = repoBranches[repo.id] || [];
+                        const isLoadingBranches = branchLoading[repo.id];
+                        const currentBranch = selectedBranches[repo.id] || repo.default_branch;
+                        return (
+                          <div
+                            key={repo.id}
+                            className={clsx(
+                              'grid grid-cols-[40px_1fr_120px_200px_40px] gap-2 items-center px-6 py-2.5 border-b border-frost/50 transition-colors',
+                              isSelected
+                                ? 'bg-plum-50'
+                                : 'hover:bg-surface-secondary',
+                            )}
+                          >
+                            {/* Checkbox */}
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() =>
+                                toggleRepo(repo.id, repo.default_branch)
+                              }
+                              className="h-4 w-4 rounded border-frost text-plum focus:ring-plum/30 accent-plum cursor-pointer"
+                            />
+
+                            {/* Repo name */}
+                            <span className="text-sm font-medium text-plum-dark truncate">
+                              {repo.name}
+                            </span>
+
+                            {/* Project */}
+                            <span className="text-sm text-frost-dark truncate">
+                              {repo.project}
+                            </span>
+
+                            {/* Branch dropdown — always visible */}
+                            <div className="flex items-center gap-1.5">
+                              <GitBranch className="h-3.5 w-3.5 text-frost-dark shrink-0" />
+                              {isLoadingBranches ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-frost-dark" />
+                              ) : (
+                                <select
+                                  value={currentBranch}
+                                  onFocus={() => fetchBranchesFor(repo.id)}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSelectedBranches((sb) => ({
+                                      ...sb,
+                                      [repo.id]: val,
+                                    }));
+                                    // Auto-select the repo when branch is changed
+                                    if (!selectedRepos.has(repo.id)) {
+                                      setSelectedRepos((prev) => {
+                                        const next = new Set(prev);
+                                        next.add(repo.id);
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                  className={clsx(
+                                    'text-xs border rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-plum/30 max-w-[180px] truncate cursor-pointer',
+                                    currentBranch !== repo.default_branch
+                                      ? 'bg-plum-50 border-plum/30 text-plum font-medium'
+                                      : 'bg-white border-frost text-plum-dark',
+                                  )}
+                                >
+                                  {branches.length > 0 ? (
+                                    branches.map((b) => (
+                                      <option key={b.name} value={b.name}>
+                                        {b.name}
+                                        {b.name === repo.default_branch
+                                          ? ' (default)'
+                                          : ''}
+                                      </option>
+                                    ))
+                                  ) : (
+                                    <option value={repo.default_branch}>
+                                      {repo.default_branch}
+                                    </option>
+                                  )}
+                                </select>
+                              )}
+                            </div>
+
+                            {/* External link */}
+                            {repo.url ? (
+                              <a
+                                href={repo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-frost-dark hover:text-plum transition-colors"
+                              >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                                </svg>
+                              </a>
+                            ) : (
+                              <div />
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Progress card */}
           <div className="brand-card p-6 space-y-5">

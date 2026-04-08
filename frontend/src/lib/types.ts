@@ -25,7 +25,7 @@ export interface ComplianceResult {
   category: string;
   severity: Severity;
   status: ComplianceStatus;
-  message: string;
+  details: string;
   file_path: string | null;
   line_number: number | null;
   current_code: string;
@@ -37,8 +37,9 @@ export interface CategoryScore {
   category: string;
   score: number;
   passed: number;
-  total: number;
-  results: ComplianceResult[];
+  failed: number;
+  not_applicable: number;
+  total_rules: number;
 }
 
 export interface RepoScanResult {
@@ -48,6 +49,7 @@ export interface RepoScanResult {
   dotnet_version: string | null;
   csharp_version: string | null;
   categories: CategoryScore[];
+  compliance_results: ComplianceResult[];
   scan_timestamp: string;
   complexity: Complexity;
 }
@@ -109,6 +111,13 @@ export interface ADORepository {
   project: string;
   dotnet_version: string;
   last_commit_date: string;
+}
+
+/* ── Branch ── */
+
+export interface ADOBranch {
+  name: string;
+  objectId: string;
 }
 
 /* ── UI-specific types ── */

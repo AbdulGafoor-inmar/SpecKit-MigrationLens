@@ -59,7 +59,8 @@ async def get_dashboard(
             for cs in (r.category_scores or r.categories or []):
                 cat_totals.setdefault(cs.category, []).append(cs.score)
         data.category_averages = {
-            cat: round(sum(vals) / len(vals), 1) for cat, vals in cat_totals.items()
+            cat: round(sum(vals) / len(vals), 1)
+            for cat, vals in cat_totals.items()
         }
 
     # If project filter is specified, filter repositories

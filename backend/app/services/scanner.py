@@ -16,7 +16,7 @@ from app.models.schemas import (
 )
 from app.services.ado_client import ADOClient
 from app.services.cache import CacheManager
-from app.services.compliance import ComplianceEngine
+from app.services import ai_compliance
 
 logger = structlog.get_logger()
 
@@ -26,7 +26,6 @@ class ScannerService:
 
     def __init__(self):
         self._progress = ScanProgress()
-        self._engine = ComplianceEngine()
         self._cache = CacheManager()
         self._cancelled = False
 
@@ -58,27 +57,42 @@ class ScannerService:
         project: str = "",
         pat_token: str = "",
         repo_ids: list[str] | None = None,
+        repo_branches: dict[str, str] | None = None,
     ) -> DashboardSummary:
         """
-        Scan repositories and evaluate compliance.
+        Scan repositories and evaluate compliance using AI against wiki rules.
 
         Args:
             organization: ADO organization name
             project: Optional project filter
             pat_token: Optional PAT override
             repo_ids: Optional list of specific repo IDs to scan (scans all if empty)
+            repo_branches: Optional mapping of repo ID to branch name
 
         Returns:
             DashboardSummary with all scan results
         """
+        # Mark scan as active immediately so polling picks it up
+        self._progress = ScanProgress(
+            total_repos=0,
+            scanned_repos=0,
+            is_scanning=True,
+            message="Initializing scan...",
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+        self._cancelled = False
+
         client = ADOClient(pat=pat_token or None, organization=organization)
 
         # Fetch repository list
         logger.info("scan_started", organization=organization, project=project)
+        self._progress.message = "Fetching repository list..."
         repos_raw = await client.list_repositories(project)
 
         if not repos_raw:
             logger.warning("no_repos_found", organization=organization)
+            self._progress.is_scanning = False
+            self._progress.message = "No repositories found."
             return DashboardSummary(last_scan_time=datetime.now(timezone.utc).isoformat())
 
         # Filter by repo_ids if provided
@@ -88,18 +102,23 @@ class ScannerService:
 
         if not repos_raw:
             logger.warning("no_repos_found", organization=organization)
+            self._progress.is_scanning = False
+            self._progress.message = "No repositories found."
             return DashboardSummary(last_scan_time=datetime.now(timezone.utc).isoformat())
 
-        # Initialize progress
-        self._progress = ScanProgress(
-            total_repos=len(repos_raw),
-            scanned_repos=0,
-            is_scanning=True,
-            message="Starting scan...",
-            started_at=datetime.now(timezone.utc).isoformat(),
-        )
+        # Fetch wiki rules once for the entire scan
+        self._progress.message = "Fetching compliance rules from wiki..."
+        ai_compliance.clear_wiki_cache()
+        wiki_rules_content = await ai_compliance.fetch_wiki_rules(client, project)
+        if not wiki_rules_content:
+            logger.error("wiki_rules_not_available_scan_cannot_proceed")
+            self._progress.is_scanning = False
+            self._progress.message = "Failed to fetch wiki rules."
+            return DashboardSummary(last_scan_time=datetime.now(timezone.utc).isoformat())
 
-        self._cancelled = False
+        # Update progress with actual repo count
+        self._progress.total_repos = len(repos_raw)
+        self._progress.message = "Starting scan..."
         scan_results: list[RepoScanResult] = []
 
         for repo_raw in repos_raw:
@@ -116,13 +135,17 @@ class ScannerService:
                 .replace("refs/heads/", "")
             )
 
+            # Use user-specified branch if provided, otherwise use default
+            branch = (repo_branches or {}).get(repo_id, default_branch)
+
             self._progress.current_repo = repo_name
-            self._progress.message = f"Scanning {repo_name}..."
-            logger.info("scanning_repo", repo=repo_name)
+            self._progress.message = f"Scanning {repo_name} ({branch})..."
+            logger.info("scanning_repo", repo=repo_name, branch=branch)
 
             try:
                 result = await self._scan_single_repo(
-                    client, repo_id, repo_name, repo_project, default_branch, repo_raw
+                    client, repo_id, repo_name, repo_project, branch, repo_raw,
+                    wiki_rules_content=wiki_rules_content,
                 )
                 scan_results.append(result)
             except Exception as e:
@@ -173,6 +196,7 @@ class ScannerService:
         project: str,
         default_branch: str,
         repo_raw: dict,
+        wiki_rules_content: str = "",
     ) -> RepoScanResult:
         """Scan a single repository for compliance."""
         # Get file listing
@@ -189,17 +213,27 @@ class ScannerService:
             if content:
                 csproj_files.append((path, content))
 
-        # Fetch sample .cs files (up to 5 for pattern detection) as (path, content) tuples
-        cs_paths = [f for f in file_list if f.endswith(".cs")][:5]
+        # Fetch sample .cs files (up to 15 for AI pattern detection) as (path, content) tuples
+        cs_paths = [f for f in file_list if f.endswith(".cs")][:15]
         cs_files: list[tuple[str, str]] = []
         for path in cs_paths:
             content = await client.get_file_content(project, repo_id, path, default_branch)
             if content:
                 cs_files.append((path, content))
 
-        # Fetch extra files for specific checks
+        # Fetch extra files for specific checks (Dockerfile, deployment configs, pipelines, scripts)
         extra_files: dict[str, str] = {}
-        for fname in ["Dockerfile", "deployment.yaml", "api-deployment.yaml", "cronjob.yaml"]:
+        extra_patterns = [
+            "Dockerfile", "deployment.yaml", "api-deployment.yaml", "cronjob.yaml",
+            "azure-pipelines.yml", ".azure-pipelines.yml",
+            "CreateResources.ps1", "global.json",
+            "appsettings.json", "Program.cs", "Startup.cs",
+            "AppConfiguration.cs",
+            "api-service.yaml", "api-ingress.yaml",
+            "cronjob.yaml",
+            "LoggerExtension.cs", "LoggingMiddleware.cs", "ExceptionMiddleware.cs",
+        ]
+        for fname in extra_patterns:
             matching = [f for f in file_list if f.lower().endswith(fname.lower())]
             if matching:
                 content = await client.get_file_content(
@@ -207,6 +241,14 @@ class ScannerService:
                 )
                 if content:
                     extra_files[fname] = content
+
+        # Fetch all .ps1 scripts (email addresses, config scripts, etc.)
+        ps1_paths = [f for f in file_list if f.lower().endswith(".ps1")]
+        for path in ps1_paths[:10]:
+            if not any(path.lower().endswith(p.lower()) for p in extra_patterns):
+                content = await client.get_file_content(project, repo_id, path, default_branch)
+                if content:
+                    extra_files[path] = content
 
         # Detect .NET version from csproj
         dotnet_version = "unknown"
@@ -222,11 +264,18 @@ class ScannerService:
         app_type = self._detect_app_type(file_list, extra_files, csproj_files, cs_files)
         logger.info("app_type_detected", repo=repo_name, app_type=app_type)
 
-        # Evaluate compliance — filtered by app type
-        compliance_results, category_scores = self._engine.evaluate(
-            csproj_files, cs_files, file_list, extra_files, app_type=app_type
+        # Evaluate compliance using AI against wiki rules
+        logger.info("using_ai_compliance_scan", repo=repo_name)
+        compliance_results, category_scores = await ai_compliance.evaluate_repo_with_ai(
+            repo_name=repo_name,
+            csproj_files=csproj_files,
+            cs_files=cs_files,
+            file_list=file_list,
+            extra_files=extra_files,
+            app_type=app_type,
+            wiki_rules_content=wiki_rules_content,
         )
-        overall_score = ComplianceEngine.compute_overall_score(category_scores)
+        overall_score = ai_compliance.compute_overall_score(category_scores)
 
         # Determine complexity
         project_count = len(csproj_paths)
@@ -340,7 +389,7 @@ class ScannerService:
         passing = sum(1 for s in scores if s >= 70)
         failing = len(scores) - passing
 
-        # Compute category averages across all repos
+        # Compute category averages across all repos (include all categories)
         cat_totals: dict[str, list[float]] = {}
         for r in results:
             for cs in r.category_scores:
@@ -348,6 +397,12 @@ class ScannerService:
         category_averages = {
             cat: round(sum(vals) / len(vals), 1) for cat, vals in cat_totals.items()
         }
+
+        # Compute version distribution
+        version_dist: dict[str, int] = {}
+        for r in results:
+            ver = r.dotnet_version or r.repository.dotnet_version or "unknown"
+            version_dist[ver] = version_dist.get(ver, 0) + 1
 
         return DashboardSummary(
             total_repositories=len(results),
@@ -358,6 +413,7 @@ class ScannerService:
             repositories=results,
             scan_timestamp=now,
             category_averages=category_averages,
+            version_distribution=version_dist,
             # Also set internal fields for cache compat
             total_repos=len(results),
             scan_results=results,

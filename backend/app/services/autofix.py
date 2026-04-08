@@ -27,7 +27,7 @@ from app.models.schemas import (
     ComplianceResult,
 )
 from app.services.ado_client import ADOClient
-from app.services import ai_service
+from app.services import ai_service, ai_compliance
 from app.services.cache import CacheManager
 from app.services.workitems import WorkItemService
 
@@ -138,6 +138,9 @@ class AutoFixPipeline:
         # ── Step 2: Generate AI Fixes ───────────────────────────────────────
         yield AutoFixStepStatus(step=2, name="Generate AI Fixes", status="running")
         try:
+            # Fetch wiki rules to give AI full context of standards
+            wiki_rules = await ai_compliance.fetch_wiki_rules(self._client, project)
+
             # Fetch current file contents for files that need fixing
             file_contents = await self._fetch_files_for_rules(
                 project, repo_id, failing_rules
@@ -147,6 +150,7 @@ class AutoFixPipeline:
                 repo_name=repo_name,
                 failing_rules=failing_rules,
                 file_contents=file_contents,
+                wiki_rules=wiki_rules,
             )
 
             if not fixes:
@@ -307,16 +311,17 @@ class AutoFixPipeline:
             # Fetch PR diff
             diff = await self._client.get_pr_diff(project, repo_id, pr_id)
 
-            # Get coding standards from wiki cache
-            from app.api.pr_review import _get_wiki_coding_standards
-            coding_standards = _get_wiki_coding_standards(project)
+            # Build acceptance criteria from the failing rules
+            ac_lines = "\n".join(
+                f"- {r['rule_name']} must pass after changes"
+                for r in failing_rules[:20]
+            )
 
             # Run AI review
             review_raw = await ai_service.review_pull_request(
                 story_description=f"Migrate {repo_name} to .NET 10 / C# 14 — fix {len(failing_rules)} compliance issues",
-                acceptance_criteria="All compliance rules should pass after these changes",
+                acceptance_criteria=ac_lines or "All compliance rules should pass after these changes",
                 business_logic="Automated compliance fixes for .NET 10 migration",
-                coding_standards=coding_standards,
                 pr_diff=diff,
                 pr_title=f"[MigrationLens] Auto-fix compliance issues — {repo_name}",
             )

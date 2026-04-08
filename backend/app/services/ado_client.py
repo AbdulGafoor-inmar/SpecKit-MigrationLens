@@ -210,6 +210,26 @@ class ADOClient:
             logger.warning("get_wiki_page_error", path=path, error=str(e))
             return None
 
+    async def get_wiki_page_by_id(
+        self, project: str, wiki_id: str, page_id: int, include_content: bool = True
+    ) -> dict[str, Any] | None:
+        """Get a wiki page by its numeric ID, optionally including content."""
+        url = f"{self._base_url}/{project}/_apis/wiki/wikis/{wiki_id}/pages/{page_id}"
+        params: dict[str, Any] = {
+            "includeContent": str(include_content).lower(),
+            "api-version": "7.1",
+        }
+        logger.info("getting_wiki_page_by_id", project=project, wiki=wiki_id, page_id=page_id)
+
+        try:
+            return await self._get(url, params)
+        except httpx.HTTPStatusError as e:
+            logger.error("get_wiki_page_by_id_failed", status=e.response.status_code, page_id=page_id)
+            return None
+        except Exception as e:
+            logger.warning("get_wiki_page_by_id_error", page_id=page_id, error=str(e))
+            return None
+
     async def list_wiki_pages(
         self, project: str, wiki_id: str, path: str = "/", recursion_level: str = "full"
     ) -> list[dict[str, Any]]:
@@ -571,6 +591,34 @@ class ADOClient:
         except httpx.HTTPStatusError as e:
             logger.error("post_pr_comment_failed", status=e.response.status_code)
             return None
+
+    # ── Branch Listing ────────────────────────────────────────────────────
+
+    async def list_branches(
+        self, project: str, repo_id: str
+    ) -> list[dict[str, Any]]:
+        """List all branches for a repository.
+
+        Returns a list of dicts with 'name' (short name) and 'objectId'.
+        """
+        url = f"{self._base_url}/{project}/_apis/git/repositories/{repo_id}/refs"
+        params = {"filter": "heads/", "api-version": "7.1"}
+
+        try:
+            data = await self._get(url, params)
+            refs = data.get("value", [])
+            branches = []
+            for ref in refs:
+                full_name = ref.get("name", "")
+                short_name = full_name.replace("refs/heads/", "")
+                branches.append({
+                    "name": short_name,
+                    "objectId": ref.get("objectId", ""),
+                })
+            return branches
+        except httpx.HTTPStatusError as e:
+            logger.error("list_branches_failed", repo_id=repo_id, status=e.response.status_code)
+            return []
 
     # ── Git Operations (Branch / Push / PR Creation) ────────────────────────
 

@@ -44,7 +44,7 @@ async def _chat(
             model=settings.azure_openai_deployment,
             messages=messages,  # type: ignore[arg-type]
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
         )
         return (response.choices[0].message.content or "").strip()
     except Exception as e:
@@ -744,17 +744,20 @@ async def generate_code_fixes(
     repo_name: str,
     failing_rules: list[dict[str, Any]],
     file_contents: dict[str, str],
+    wiki_rules: str = "",
 ) -> dict[str, str]:
     """Generate AI code fixes for failing compliance rules.
 
     Groups failing rules by the file they affect, then asks GPT to produce
-    corrected file content for each affected file.
+    corrected file content for each affected file. When wiki_rules are provided,
+    the AI uses the actual wiki standards as context for generating fixes.
 
     Args:
         repo_name: repository name for context
         failing_rules: list of dicts with rule_id, rule_name, details, severity,
                        file_path, suggested_fix, category
         file_contents: dict of {file_path: current_content} for files that need fixing
+        wiki_rules: raw markdown content of the wiki rules page (optional)
 
     Returns:
         dict of {file_path: corrected_content} for successfully fixed files
@@ -820,6 +823,15 @@ async def generate_code_fixes(
 
         file_ext = file_path.rsplit(".", 1)[-1] if "." in file_path else "txt"
 
+        # Build wiki rules context if available
+        wiki_context = ""
+        if wiki_rules:
+            wiki_context = (
+                "\n\nWIKI STANDARDS (these are the authoritative migration rules — "
+                "follow the code patterns and standards from this wiki page):\n"
+                f"{wiki_rules[:6000]}\n"
+            )
+
         messages = [
             {
                 "role": "system",
@@ -829,6 +841,7 @@ async def generate_code_fixes(
                     "Return ONLY the complete corrected file content — no markdown fences, "
                     "no explanations, no comments about what changed. "
                     "Just the raw file content ready to be saved."
+                    f"{wiki_context}"
                 ),
             },
             {

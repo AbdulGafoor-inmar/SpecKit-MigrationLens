@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/Header';
 import { SummaryCards } from '@/components/dashboard/SummaryCards';
 import { RepoTable } from '@/components/dashboard/RepoTable';
 import { CategoryOverview } from '@/components/dashboard/CategoryOverview';
+import { RuleBreakdown } from '@/components/dashboard/RuleBreakdown';
 import { ScanProgressPanel } from '@/components/scan/ScanProgressPanel';
 import { ComplianceRadar } from '@/components/charts/ComplianceRadar';
 import { VersionPieChart } from '@/components/charts/VersionPieChart';
@@ -28,7 +29,8 @@ import {
   ExternalLink,
   StopCircle,
 } from 'lucide-react';
-import { getExportUrl } from '@/lib/api';
+import { getExportUrl, listBranches } from '@/lib/api';
+import type { ADOBranch } from '@/lib/types';
 import { clsx } from 'clsx';
 
 export default function DashboardPage() {
@@ -39,6 +41,23 @@ export default function DashboardPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [repoBranches, setRepoBranches] = useState<Record<string, ADOBranch[]>>({});
+  const [selectedBranches, setSelectedBranches] = useState<Record<string, string>>({});
+  const [branchLoading, setBranchLoading] = useState<Record<string, boolean>>({});
+
+  /* ── Fetch branches for a repo (on-demand when dropdown is focused) ── */
+  const fetchBranchesFor = useCallback((repoId: string) => {
+    if (repoBranches[repoId] || branchLoading[repoId]) return;
+    setBranchLoading((bl) => ({ ...bl, [repoId]: true }));
+    listBranches(repoId)
+      .then((branches) => {
+        setRepoBranches((rb) => ({ ...rb, [repoId]: branches }));
+        setBranchLoading((bl) => ({ ...bl, [repoId]: false }));
+      })
+      .catch(() => {
+        setBranchLoading((bl) => ({ ...bl, [repoId]: false }));
+      });
+  }, [repoBranches, branchLoading]);
 
   /* ── Filtered repos ── */
   const filteredRepos = useMemo(() => {
@@ -86,7 +105,17 @@ export default function DashboardPage() {
 
   function handleStartScan() {
     const ids = Array.from(selectedIds);
-    start(ids.length > 0 ? ids : undefined);
+    // Build branch mapping for repos with non-default branches
+    const branchMap: Record<string, string> = {};
+    for (const id of ids.length > 0 ? ids : repos.map((r) => r.id)) {
+      if (selectedBranches[id]) {
+        branchMap[id] = selectedBranches[id];
+      }
+    }
+    start(
+      ids.length > 0 ? ids : undefined,
+      Object.keys(branchMap).length > 0 ? branchMap : undefined,
+    );
   }
 
   const hasResults = !dashboardLoading && data && data.total_repositories > 0;
@@ -247,7 +276,7 @@ export default function DashboardPage() {
                         Project
                       </th>
                       <th className="px-4 py-3 text-[10px] font-semibold text-frost-dark uppercase tracking-[0.12em]">
-                        Default Branch
+                        Branch
                       </th>
                       <th className="px-4 py-3 text-[10px] font-semibold text-frost-dark uppercase tracking-[0.12em]">
                         Link
@@ -279,8 +308,50 @@ export default function DashboardPage() {
                             <span className="font-medium text-plum-dark text-[13px]">{repo.name}</span>
                           </td>
                           <td className="px-4 py-2.5 text-frost-dark text-[13px]">{repo.project}</td>
-                          <td className="px-4 py-2.5 text-frost-dark text-xs font-mono">
-                            {repo.default_branch}
+                          <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5">
+                              <GitBranch className="h-3 w-3 text-frost-dark shrink-0" />
+                              {branchLoading[repo.id] ? (
+                                <Loader2 className="h-3 w-3 animate-spin text-frost-dark" />
+                              ) : (
+                                <select
+                                  value={selectedBranches[repo.id] || repo.default_branch}
+                                  onFocus={() => fetchBranchesFor(repo.id)}
+                                  onChange={(e) => {
+                                    setSelectedBranches((sb) => ({
+                                      ...sb,
+                                      [repo.id]: e.target.value,
+                                    }));
+                                    // Auto-select the repo when branch is changed
+                                    if (!selectedIds.has(repo.id)) {
+                                      setSelectedIds((prev) => {
+                                        const next = new Set(prev);
+                                        next.add(repo.id);
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                  className={clsx(
+                                    'text-xs border rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-plum/30 max-w-[200px] truncate cursor-pointer font-mono',
+                                    (selectedBranches[repo.id] && selectedBranches[repo.id] !== repo.default_branch)
+                                      ? 'bg-plum-50 border-plum/30 text-plum font-medium'
+                                      : 'bg-white border-frost text-frost-dark',
+                                  )}
+                                >
+                                  {(repoBranches[repo.id] || []).length > 0 ? (
+                                    repoBranches[repo.id].map((b) => (
+                                      <option key={b.name} value={b.name}>
+                                        {b.name}{b.name === repo.default_branch ? ' (default)' : ''}
+                                      </option>
+                                    ))
+                                  ) : (
+                                    <option value={repo.default_branch}>
+                                      {repo.default_branch}
+                                    </option>
+                                  )}
+                                </select>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-2.5">
                             {repo.url && (
@@ -360,6 +431,8 @@ export default function DashboardPage() {
                 <VersionPieChart repos={data.repositories} />
                 <ScoreDistribution repos={data.repositories} />
               </div>
+
+              <RuleBreakdown data={data} />
             </>
           )}
         </main>

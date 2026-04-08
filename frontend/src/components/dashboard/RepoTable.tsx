@@ -85,16 +85,30 @@ export function RepoTable({ repos }: RepoTableProps) {
                 <td className="px-6 py-3">
                   <div className="flex items-center gap-2">
                     <ScoreRing score={repo.overall_score} size={32} strokeWidth={3} showLabel={false} />
-                    <span
-                      className={clsx('font-semibold', {
-                        'text-teal': repo.overall_score >= 80,
-                        'text-goldenrod': repo.overall_score >= 60 && repo.overall_score < 80,
-                        'text-sunset': repo.overall_score >= 40 && repo.overall_score < 60,
-                        'text-red-500': repo.overall_score < 40,
-                      })}
-                    >
-                      {Math.round(repo.overall_score)}%
-                    </span>
+                    <div>
+                      <span
+                        className={clsx('font-semibold', {
+                          'text-teal': repo.overall_score >= 80,
+                          'text-goldenrod': repo.overall_score >= 60 && repo.overall_score < 80,
+                          'text-sunset': repo.overall_score >= 40 && repo.overall_score < 60,
+                          'text-red-500': repo.overall_score < 40,
+                        })}
+                      >
+                        {Math.round(repo.overall_score)}%
+                      </span>
+                      {repo.categories && (() => {
+                        const totals = repo.categories.reduce(
+                          (acc, c) => ({ p: acc.p + c.passed, f: acc.f + c.failed, n: acc.n + c.not_applicable }),
+                          { p: 0, f: 0, n: 0 },
+                        );
+                        const evaluated = totals.p + totals.f;
+                        return evaluated > 0 ? (
+                          <p className="text-[10px] text-frost-dark leading-tight mt-0.5">
+                            {totals.p}/{evaluated} rules
+                          </p>
+                        ) : null;
+                      })()}
+                    </div>
                   </div>
                 </td>
                 <td className="px-6 py-3">

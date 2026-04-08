@@ -95,6 +95,7 @@ class ScanRequest(BaseModel):
     project: str = ""
     pat_token: str = ""
     repo_ids: list[str] = Field(default_factory=list, description="Optional list of repo IDs to scan. If empty, scans all.")
+    repo_branches: dict[str, str] = Field(default_factory=dict, description="Optional mapping of repo ID to branch name. Uses default branch if not specified.")
 
 
 class ScanProgress(BaseModel):

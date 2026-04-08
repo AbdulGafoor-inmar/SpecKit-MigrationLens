@@ -11,33 +11,15 @@ from app.models.schemas import (
 )
 from app.services.ado_client import ADOClient
 from app.services.cache import CacheManager
-from app.services.compliance import ComplianceEngine
 from app.services.wiki_analyzer import WikiAnalyzer
 
 router = APIRouter()
-
-# Load YAML rules once to map rule_id -> wiki_source
-_WIKI_SOURCE_MAP: dict[str, str] = {}
-
-def _get_wiki_source_map() -> dict[str, str]:
-    """Build a lookup from rule_id to its wiki_source (if any)."""
-    global _WIKI_SOURCE_MAP
-    if _WIKI_SOURCE_MAP:
-        return _WIKI_SOURCE_MAP
-    engine = ComplianceEngine()
-    for cat in engine._rules:
-        for rule in cat.get("rules", []):
-            ws = rule.get("wiki_source", "")
-            if ws:
-                _WIKI_SOURCE_MAP[rule["id"]] = ws
-    return _WIKI_SOURCE_MAP
 
 
 def _build_migration_steps(scan_result) -> list[MigrationStep]:
     """Build ordered migration steps from compliance results."""
     steps: list[MigrationStep] = []
     step_num = 0
-    wiki_map = _get_wiki_source_map()
 
     # Severity ordering: critical first, then high, medium, low
     severity_order = {
@@ -76,7 +58,6 @@ def _build_migration_steps(scan_result) -> list[MigrationStep]:
                 suggested_fix=result.suggested_fix,
                 description=result.details,
                 migration_guide=result.migration_guide,
-                wiki_source=wiki_map.get(result.rule_id, ""),
             )
         )
 
@@ -97,7 +78,6 @@ def _build_migration_steps(scan_result) -> list[MigrationStep]:
                 suggested_fix="",
                 description=result.details or f"Compliant with {result.rule_name}",
                 migration_guide="",
-                wiki_source=wiki_map.get(result.rule_id, ""),
             )
         )
 
